@@ -7,11 +7,6 @@ const port = 5000;
 let tickets = [];
 let nextId = 1;
 
-const allowedCategories = ["Hardware", "Software", "Network", "Account", "Other"]
-const allowedPriorities = ["low", "medium", "high", "urgent"]
-const allowedStatus = ["open", "in progress", "resolved", "closed"]
-
-
 // Enable JSON parsing middleware (useful if you expand the API later)
 app.use(express.json());
 
@@ -30,7 +25,7 @@ app.get('/api/tickets/:id', (req,res) => {
     const ticket = tickets.find(t => t.id === urlId); //returns the ticket id if found and 'undefined' if doesn't
 
     if(!ticket){
-        return res.status(404).json({ error: "Ticket not found" }) 
+        res.status(404).json({ error: "Ticket not found" }) 
 
     } else {
         res.json(ticket)
@@ -47,10 +42,12 @@ app.post('/api/tickets', (req, res) => {
         return res.status(400).json({message: "Missing name, email, title, category or description fields, try again"})
     }
 
+    const allowedCategories = ["Hardware", "Software", "Network", "Account", "Other"]
     if (category !== undefined && !allowedCategories.includes(category) ){
         return res.status(400).json({message: "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'"})
     }
 
+    const allowedPriorities = ["low", "medium", "high", "urgent"]
     if ( priority !== undefined && !allowedPriorities.includes(priority)){
         return res.status(400).json({message: "priority should be 'low', 'medium', 'high', or 'urgent'"})
     }
@@ -90,14 +87,17 @@ app.put('/api/tickets/:id', (req,res) => {
 
     const { title, category, description, priority, status} = req.body
 
+    const allowedCategories = ["Hardware", "Software", "Network", "Account", "Other"]
     if (category !== undefined && !allowedCategories.includes(category) ){
         return res.status(400).json({message: "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'"})
     }
 
+    const allowedPriorities = ["low", "medium", "high", "urgent"]
     if ( priority !== undefined && !allowedPriorities.includes(priority)){
         return res.status(400).json({message: "priority should be 'low', 'medium', 'high', or 'urgent'"})
     }
 
+    const allowedStatus = ["open", "in progress", "resolved", "closed"]
     if (status !== undefined && !allowedStatus.includes(status)){
         return res.status(400).json({message: "status should be 'open', 'in progress', 'resolved', or 'closed'"})
     }
