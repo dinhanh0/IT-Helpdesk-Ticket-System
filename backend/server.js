@@ -1,6 +1,9 @@
 // Basic Express server setup
 const express = require('express');
 
+//import db.js 
+const pool = require("./db");
+
 const app = express();
 const port = 5000;
 
@@ -14,6 +17,16 @@ const allowedStatus = ["open", "in progress", "resolved", "closed"]
 
 // Enable JSON parsing middleware (useful if you expand the API later)
 app.use(express.json());
+
+app.get("/api/test-db", async(req,res) => {
+    try {
+        const result = await pool.query("SELECT * FROM tickets");
+        res.json(result.rows);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Database connection failed" });
+    }
+});
 
 app.get("/", (req, res) => {
     res.send("IT Help Desk Ticket System API is running");
