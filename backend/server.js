@@ -18,41 +18,52 @@ const allowedStatus = ["open", "in progress", "resolved", "closed"]
 // Enable JSON parsing middleware (useful if you expand the API later)
 app.use(express.json());
 
-app.get("/api/test-db", async(req,res) => {
-    try {
-        const result = await pool.query("SELECT * FROM tickets");
-        res.json(result.rows);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Database connection failed" });
-    }
-});
-
 app.get("/", (req, res) => {
     res.send("IT Help Desk Ticket System API is running");
 });
 
-// GET retrieve the data
-app.get('/api/tickets', (req, res) => {
-    res.json(tickets)
+// GET retrieve the data from an array
+// app.get('/api/tickets', (req, res) => {
+//     res.json(tickets)
+// });
+
+// GET retrieve the data from Postgresql
+app.get('/api/tickets', async (req, res) => {
+    try {
+        const result = await pool.query("SELECT * FROM tickets")
+        res.json(result.rows)
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({error: "Database connection failed"})
+    }
 });
 
-app.get('/api/tickets/:id', (req,res) => {
+
+app.get('/api/tickets/:id', async (req,res) => {
     const urlId = Number(req.params.id);
 
-    const ticket = tickets.find(t => t.id === urlId); //returns the ticket id if found and 'undefined' if doesn't
+    //const ticket = tickets.find(t => t.id === urlId); //returns the ticket id if found and 'undefined' if doesn't
 
-    if(!ticket){
-        return res.status(404).json({ error: "Ticket not found" }) 
+    const sqlQuery = 'SELECT * FROM tickets where id = $1'
+    const values = [urlId]
 
-    } else {
-        res.json(ticket)
+    try {
+        const result = await pool.query(sqlQuery,values)
+
+        if (result.rows.length === 0){
+            return res.status(404).json({message: "No matching ticket found"})
+        }
+        res.json(result.rows[0])
+
+
+    }catch(error){
+        res.status(500).json({error: "Error retrieving ticket "})
     }
 
 });
 
-// POST sends the data
-app.post('/api/tickets', (req, res) => {
+// POST sends the data 
+app.post('/api/tickets', async (req, res) => {
 
     const { name, email, title, category, description, priority } = req.body;  //'req' means request
 
@@ -69,40 +80,29 @@ app.post('/api/tickets', (req, res) => {
     }
 
 
-    const newTicket = {
-        id: nextId++, 
-        name,
-        email,
-        title,
-        category,
-        description,
-        priority: priority ?? 'low',
-        status: 'open',
-        createdAt: new Date(),
-        updatedAt: new Date()
+    const sqlQuery = 'INSERT INTO tickets (name,email,title,category,description, priority, status) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *'
+    const values = [name, email, title, category, description, priority ?? 'low', 'open']
+
+    try{
+        const result = await pool.query(sqlQuery,values)
+        res.status(201).json(result.rows[0])
+
+    }catch (error){
+        res.status(500).json({error: "Error creating a ticket"})
     }
 
-    tickets.push(newTicket);
-
-    res.json(newTicket)
 });
 
-
-app.put('/api/tickets/:id', (req,res) => {
+//PUT updates the data
+app.put('/api/tickets/:id', async (req,res) => {
 
     const urlId = Number(req.params.id);
 
-    const ticketIndex = tickets.findIndex(t => t.id === urlId); // findIndex returns the array index if found, or -1 if not found
+    const { name, email, title, category, description, priority, status} = req.body
 
-    console.log("ticketIndex:", ticketIndex);
-
-    if(ticketIndex === -1){
-        return res.status(404).json({ error: "Ticket not found" }) 
-
+    if (!name && !email && !title && !category && !description && !priority && !status){
+        res.status(400).json({message: "required fields are missing"})
     }
-
-    const { title, category, description, priority, status} = req.body
-
     if (category !== undefined && !allowedCategories.includes(category) ){
         return res.status(400).json({message: "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'"})
     }
@@ -115,25 +115,28 @@ app.put('/api/tickets/:id', (req,res) => {
         return res.status(400).json({message: "status should be 'open', 'in progress', 'resolved', or 'closed'"})
     }
 
-    const oldTicket = tickets[ticketIndex]
+    const sqlQuery = `
+    UPDATE tickets 
+    SET name = $1, email =$2, title= $3, category = $4, description = $5, priority = $6, status =$7
+    WHERE id = $8
+    RETURNING *
+    `
+    const values =[name, email, title, category, description, priority, status, urlId]
 
-    const updatedTicket = {
-        ...oldTicket,
-        title: title ?? oldTicket.title,
-        category: category ?? oldTicket.category,
-        description: description ?? oldTicket.description,
-        priority: priority ?? oldTicket.priority,
-        status: status ?? oldTicket.status,
-        updatedAt: new Date()
+    try {
+        const result = await pool.query(sqlQuery,values)
+        if (result.rows.length === 0){
+            return res.status(404).json({message: "No matching ticket found"})
+        }
+        res.json({
+            message:'Ticket updated successfully', ticket: result.rows[0]
+        });
+            
+
+    }catch(error){
+        return res.status(500).json({error: "Error updating ticket"})
     }
 
-
-    tickets[ticketIndex] = updatedTicket;
-
-    
-
-
-    res.json(updatedTicket);
 });
 
 app.delete('/api/tickets/:id', (req,res) =>{
