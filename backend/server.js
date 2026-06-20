@@ -100,8 +100,8 @@ app.put('/api/tickets/:id', async (req,res) => {
 
     const { name, email, title, category, description, priority, status} = req.body
 
-    if (!name && !email && !title && !category && !description && !priority && !status){
-        res.status(400).json({message: "required fields are missing"})
+    if (!name || !email || !title || !category || !description || !priority || !status){
+        return res.status(400).json({message: "required fields are missing"})
     }
     if (category !== undefined && !allowedCategories.includes(category) ){
         return res.status(400).json({message: "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'"})
@@ -117,7 +117,7 @@ app.put('/api/tickets/:id', async (req,res) => {
 
     const sqlQuery = `
     UPDATE tickets 
-    SET name = $1, email =$2, title= $3, category = $4, description = $5, priority = $6, status =$7
+    SET name = $1, email =$2, title= $3, category = $4, description = $5, priority = $6, status =$7, updated_at = CURRENT_TIMESTAMP
     WHERE id = $8
     RETURNING *
     `
@@ -139,22 +139,36 @@ app.put('/api/tickets/:id', async (req,res) => {
 
 });
 
-app.delete('/api/tickets/:id', (req,res) =>{
+app.delete('/api/tickets/:id', async (req,res) =>{
     const urlId = Number(req.params.id);
-    const ticketIndex = tickets.findIndex(t => t.id === urlId);
 
-    if (ticketIndex === -1){
-        return res.status(404).json({error: "Ticket not found"}); 
+    const sqlQuery = `
+    DELETE 
+    FROM tickets
+    WHERE id = $1
+    RETURNING *
+    `
+
+    const values = [urlId]
+
+    try{
+
+        const result = await pool.query(sqlQuery,values)
+        
+        if (result.rows.length === 0){
+            return res.status(404).json ({message: "Ticket not found"})
+        }
+        
+        deletedTicket = result.rows[0]
+        res.json({
+            message:"The following ticket was deleted successfully",
+            deletedTicket: deletedTicket
+
+        }) 
+
+    }catch (error){
+        return res.status(500).json ({error: "Error deleting ticket"})
     }
-
-    const deletedTicketArray = tickets.splice(ticketIndex,1);
-    const deletedTicket = deletedTicketArray[0];
-
-    res.json({
-        message:"The following ticket was deleted successfully",
-        deletedTicket: deletedTicket
-
-    })
     
 })
 
