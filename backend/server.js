@@ -29,16 +29,70 @@ app.get("/", (req, res) => {
 
 // GET retrieve the data from Postgresql
 app.get('/api/tickets', async (req, res) => {
+    const searchTerm = req.query.search;
+    const statusTerm = req.query.status
+    const priorityTerm = req.query.priority
+    const categoryTerm = req.query.category
+
+    let sqlQuery =
+    `
+    SELECT * 
+    FROM tickets
+    `
+    let conditions = []
+    let values = []
+
+    if (statusTerm){
+        if (!allowedStatus.includes(statusTerm)){
+            return res.status(400).json({message: "status should be 'open', 'in progress', 'resolved', or 'closed'"})
+        }
+        let placeHolder = values.length + 1
+        conditions.push(`status = $${placeHolder}`)
+        values.push(statusTerm)
+
+    }
+
+    if(priorityTerm){
+        if(!allowedPriorities.includes(priorityTerm)){
+            return res.status(400).json({message: "priority should be 'low', 'medium', 'high', or 'urgent'"})
+        }
+        let placeHolder = values.length + 1
+        conditions.push(`priority = $${placeHolder}`)
+        values.push(priorityTerm)
+    }
+
+    if(categoryTerm){
+        if(!allowedCategories.includes(categoryTerm)){
+            return res.status(400).json({message: "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'"})
+        }
+        let placeHolder = values.length + 1
+        conditions.push(`category = $${placeHolder}`)
+        values.push(categoryTerm)
+    }
+
+    if(searchTerm){
+        let placeHolder = values.length + 1
+        conditions.push(`(title ILIKE $${placeHolder} OR description ILIKE $${placeHolder})`)
+        values.push(`%${searchTerm}%`)
+    }
+
+    if (conditions.length !== 0){
+        sqlQuery += " WHERE " + conditions.join(" AND ")
+    }
+
+    sqlQuery += " ORDER BY created_at DESC"
+
+
     try {
-        const result = await pool.query("SELECT * FROM tickets")
+        const result = await pool.query(sqlQuery,values)
         res.json(result.rows)
     } catch (error) {
         console.error(error)
-        res.status(500).json({error: "Database connection failed"})
+        res.status(500).json({error: "Database query failed"})
     }
 });
 
-
+// GET retrieves the data
 app.get('/api/tickets/:id', async (req,res) => {
     const urlId = Number(req.params.id);
 
