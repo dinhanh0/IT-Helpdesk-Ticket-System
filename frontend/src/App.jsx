@@ -10,7 +10,7 @@ function App() {
 
       const data = await response.json()
 
-      setTickets(data);
+      setTickets(data.tickets);
 
   } catch(error) {
     console.error("Error fetching tickets:", error)
@@ -19,10 +19,7 @@ function App() {
 
 useEffect (() => {
   fetchTickets();
-}, []
-
-)
-
+}, [])
 
   return (
     <div 

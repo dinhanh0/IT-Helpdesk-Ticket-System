@@ -14,7 +14,7 @@ const allowedPriorities = ["low", "medium", "high", "urgent"]
 const allowedStatus = ["open", "in progress", "resolved", "closed"]
 
 //cors setup
-const cors = requires("cors");
+const cors = require("cors");
 app.use(cors());
 
 // Enable JSON parsing middleware (useful if you expand the API later)
