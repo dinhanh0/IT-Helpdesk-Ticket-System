@@ -1,5 +1,5 @@
 // Basic Express server setup
-const express = require('express');
+const express = require("express");
 
 //import db.js 
 const pool = require("./db");
@@ -7,10 +7,15 @@ const pool = require("./db");
 const app = express();
 const port = 5000; 
 
+
+
 const allowedCategories = ["Hardware", "Software", "Network", "Account", "Other"]
 const allowedPriorities = ["low", "medium", "high", "urgent"]
 const allowedStatus = ["open", "in progress", "resolved", "closed"]
 
+//cors setup
+const cors = requires("cors");
+app.use(cors());
 
 // Enable JSON parsing middleware (useful if you expand the API later)
 app.use(express.json());
@@ -125,7 +130,14 @@ app.get('/api/tickets', async (req, res) => {
 
     try {
         const result = await pool.query(sqlQuery,values)
-        res.json(result.rows)
+        const paginationMetadata ={
+            page: pageNumber,
+            limit: limitNumber,
+            count: result.rows.length,
+            tickets: result.rows
+        }
+
+        res.json(paginationMetadata)
     } catch (error) {
         console.error(error)
         res.status(500).json({error: "Database query failed"})
