@@ -5,10 +5,7 @@ const express = require('express');
 const pool = require("./db");
 
 const app = express();
-const port = 5000;
-
-let tickets = [];
-let nextId = 1;
+const port = 5000; 
 
 const allowedCategories = ["Hardware", "Software", "Network", "Account", "Other"]
 const allowedPriorities = ["low", "medium", "high", "urgent"]
@@ -33,6 +30,22 @@ app.get('/api/tickets', async (req, res) => {
     const statusTerm = req.query.status
     const priorityTerm = req.query.priority
     const categoryTerm = req.query.category
+    const sortTerm = req.query.sort
+
+    const pageNumber = Number(req.query.page) || 1
+    const limitNumber = Number(req.query.limit) || 10
+
+    if (!(Number.isInteger(pageNumber) && (pageNumber >= 1))){
+        return res.status(400).json({message: "page must be a positive whole number"})
+    }
+
+    if (!(Number.isInteger(limitNumber) && limitNumber >= 1 && limitNumber <= 100)){
+        return res.status(400).json({message: "limit must be a positive whole number between 1 and 100"})
+    }
+        
+    const offset = (pageNumber - 1) * limitNumber
+
+    const allowedSorts = ['oldest', 'newest', 'priority', 'status']
 
     let sqlQuery =
     `
@@ -76,12 +89,39 @@ app.get('/api/tickets', async (req, res) => {
         values.push(`%${searchTerm}%`)
     }
 
+
     if (conditions.length !== 0){
         sqlQuery += " WHERE " + conditions.join(" AND ")
     }
 
-    sqlQuery += " ORDER BY created_at DESC"
+    if (sortTerm && !allowedSorts.includes(sortTerm)){
+        return res.status(400).json({message: "sort should be 'newest', 'oldest', 'priority', or 'status'"})
+    }
 
+    sqlQuery += " ORDER BY"
+    if (sortTerm == "newest" || !sortTerm){
+        sqlQuery += " created_at DESC"
+    }
+
+    else if (sortTerm == "oldest"){
+        sqlQuery += " created_at ASC"
+    }
+
+    else if (sortTerm == "priority"){
+        sqlQuery += " priority"
+    }
+    else if (sortTerm == "status"){
+        sqlQuery += " status"
+    }
+
+
+    const limitPlaceholder = values.length + 1
+    sqlQuery += ` LIMIT $${limitPlaceholder}`
+    values.push(limitNumber)
+
+    const offsetPlaceholder = values.length + 1
+    sqlQuery += ` OFFSET $${offsetPlaceholder}`
+    values.push(offset)
 
     try {
         const result = await pool.query(sqlQuery,values)
@@ -213,7 +253,7 @@ app.delete('/api/tickets/:id', async (req,res) =>{
             return res.status(404).json ({message: "Ticket not found"})
         }
         
-        deletedTicket = result.rows[0]
+        const deletedTicket = result.rows[0]
         res.json({
             message:"The following ticket was deleted successfully",
             deletedTicket: deletedTicket
