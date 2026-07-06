@@ -99,6 +99,17 @@ app.get('/api/tickets', async (req, res) => {
         sqlQuery += " WHERE " + conditions.join(" AND ")
     }
 
+    let countQuery = `
+    SELECT COUNT(*)
+    FROM tickets
+    `
+
+    if (conditions.length !== 0){
+        countQuery += " WHERE " + conditions.join(" AND ")
+    }
+
+    const countValues = [...values]
+
     if (sortTerm && !allowedSorts.includes(sortTerm)){
         return res.status(400).json({message: "sort should be 'newest', 'oldest', 'priority', or 'status'"})
     }
@@ -129,11 +140,20 @@ app.get('/api/tickets', async (req, res) => {
     values.push(offset)
 
     try {
+        const countResult = await pool.query(countQuery, countValues)
+
         const result = await pool.query(sqlQuery,values)
+
+        const totalTickets = Number(countResult.rows[0].count)
+
+        const totalPages = Math.ceil(totalTickets / limitNumber)
+
         const paginationMetadata ={
             page: pageNumber,
             limit: limitNumber,
             count: result.rows.length,
+            totalTickets: totalTickets,
+            totalPages: totalPages,
             tickets: result.rows
         }
 

@@ -8,24 +8,42 @@ function App() {
   const [priority, setPriority] = useState("")
   const [category, setCategory] = useState("")
   const [sort, setSort] = useState("")
+  const [page, setPage] = useState(1)
+  const[totalPages,setTotalPages] = useState(1)
+  const [limit, setLimit] = useState(2)
+  
+
 
 
   async function fetchTickets(){
     try{
-      const response = await fetch(`http://localhost:5000/api/tickets?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}&priority=${encodeURIComponent(priority)}&category=${encodeURIComponent(category)}&sort=${encodeURIComponent(sort)}`)
+      const response = await fetch(`http://localhost:5000/api/tickets?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}&priority=${encodeURIComponent(priority)}&category=${encodeURIComponent(category)}&sort=${encodeURIComponent(sort)}&page=${page}&limit=${limit}`)
 
       const data = await response.json()
+      console.log(data)
 
       setTickets(data.tickets);
+      setTotalPages(data.totalPages)
 
   } catch(error) {
     console.error("Error fetching tickets:", error)
   }
+
 }
+
+function handleSearch() {
+  if (page === 1){
+    fetchTickets();
+  } else{
+    setPage(1)
+  }
+}
+
+
 
 useEffect (() => {
   fetchTickets();
-}, [])
+}, [page, limit])
   
   return (
     <div 
@@ -83,7 +101,22 @@ useEffect (() => {
           <option value = "status">Status</option>
         </select>
 
-        <button onClick = {fetchTickets}>
+        <select
+          value = {limit}
+          onChange = {(event) => {
+            setLimit(Number(event.target.value))
+            setPage(1)
+          }}>
+
+            <option value = "2"> 2 per page</option>
+            <option value = "5"> 5 per page</option> 
+            <option value = "10"> 10 per page</option> 
+            <option value = "20"> 20 per page</option>   
+
+
+        </select>
+
+        <button onClick = {handleSearch}>
           search
         </button>
 
@@ -114,6 +147,31 @@ useEffect (() => {
             ))
           )
         }
+        
+      </div>
+
+      <div
+        className = "pagination">
+        <button onClick = { () => {
+          if (page > 1) {
+            setPage(page - 1)
+          }
+        }}
+        
+        disabled = {page <= 1}>
+          Previous
+        </button >
+        
+        Page {page} of {totalPages} | {limit} per page
+
+        <button onClick = {()=>{
+          setPage(page + 1)
+        }}
+        
+        disabled = {page >= totalPages}>
+
+          Next
+        </button>
         
       </div>
 
