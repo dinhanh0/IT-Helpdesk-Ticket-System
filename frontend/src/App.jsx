@@ -55,7 +55,7 @@ async function handleCreateTicket() {
     setErrorMessage("")
     setSuccessMessage("")
 
-    if (newName.trim() == "" || newEmail.trim() === ""|| newTitle.trim() === "" || newCategory ==="" || newPriority ==="" || newDescription.trim() ===""){
+    if (newName.trim() === "" || newEmail.trim() === ""|| newTitle.trim() === "" || newCategory ==="" || newPriority ==="" || newDescription.trim() ===""){
       setErrorMessage("All fields are required")
       return
     }
@@ -108,31 +108,73 @@ async function handleCreateTicket() {
 }
 
 async function handleDeleteTicket(ticketId){
-  setErrorMessage("")
-  setSuccessMessage("")
+  try{
+    setErrorMessage("")
+    setSuccessMessage("")
 
-  const response = await fetch(`http://localhost:5000/api/tickets/${ticketId}`, {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json"
+    const response = await fetch(`http://localhost:5000/api/tickets/${ticketId}`, {
+        method: "DELETE"
+        
       }
-    }
-    )
-  response.json()
+      )
+    const data = await response.json()
 
-  if(!response.ok){
-    console.error("Error sending request", data)
-    setErrorMessage("Failed to delete ticket")
+    if(!response.ok){
+      console.error("Error sending request", data)
+      setErrorMessage("Failed to delete ticket")
+      return
+    }
+
+    fetchTickets()
+    setSuccessMessage("Ticket deleted successfully")
+
+  } catch(error) {
+    setErrorMessage("Failed to connect to server")
+    console.error("Failed to connect to server", error)
+  }
+}
+
+async function handleUpdateTicket(ticket, newStatus){
+  try{
+    setErrorMessage("")
+    setSuccessMessage("")
+    
+    const response = await fetch(`http://localhost:5000/api/tickets/${ticket.id}`,{
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"},
+    body: JSON.stringify({
+      name: ticket.name,
+      email: ticket.email,
+      title: ticket.title,
+      category: ticket.category,
+      priority: ticket.priority,
+      description: ticket.description,   
+      status: newStatus    
+
+    })     
+  })
+
+  const data = await response.json()
+
+  if (!response.ok){
+    console.log(data)
+    console.error("Failed to update ticket")
+    setErrorMessage("Failed to update ticket")
     return
   }
 
-  if(){
-    fetchTickets
+  else{
+    fetchTickets()
+    setSuccessMessage("Ticket updated successfully")
   }
-    
 
-
+}catch(error){
+  console.error("Error connecting to server")
+  setErrorMessage("Error connecting to server")
 }
+}
+
 useEffect (() => {
   fetchTickets();
 }, [page, limit])
@@ -203,7 +245,7 @@ useEffect (() => {
           cols={50}
         />
 
-        <button onClick={handleCreateTicket}>
+        <button onClick={()=>handleCreateTicket()}>
 
           Submit
 
@@ -226,6 +268,7 @@ useEffect (() => {
           <option value="">All status</option>
           <option value="open">Open</option>
           <option value="in progress">In Progress</option>
+          <option value="resolved">Resolved</option>
           <option value="closed">Closed</option>
         </select>
 
@@ -302,9 +345,22 @@ useEffect (() => {
               <p>{ticket.email}</p> 
               <p>{ticket.category}</p>
               <p>{ticket.priority}</p>
-              <p>{ticket.status}</p>
+              <select 
+              value={ticket.status}
+              onChange={(event) => handleUpdateTicket(ticket, event.target.value)}
+              >
+                <option value="open">Open</option>
+                <option value="in progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </select>
               <p>{ticket.description}</p>
+
+              <button onClick={()=> handleDeleteTicket(ticket.id)}>
+                Delete
+              </button>
             </div>
+            
             
 
             ))
