@@ -13,6 +13,16 @@ function App() {
   const [limit, setLimit] = useState(2)
   
 
+  //states for ticket form creation
+
+  const [newName, setNewName] = useState("")
+  const [newEmail, setNewEmail] = useState("")
+  const [newTitle, setNewTitle] = useState("")
+  const [newCategory, setNewCategory] = useState("")
+  const [newDescription, setNewDescription] = useState("")
+  const [newPriority, setNewPriority] = useState("")
+  const [errorMessage,setErrorMessage] = useState("")
+  const [successMessage,setSuccessMessage] = useState("")
 
 
   async function fetchTickets(){
@@ -39,8 +49,90 @@ function handleSearch() {
   }
 }
 
+async function handleCreateTicket() {
+  try{
+
+    setErrorMessage("")
+    setSuccessMessage("")
+
+    if (newName.trim() == "" || newEmail.trim() === ""|| newTitle.trim() === "" || newCategory ==="" || newPriority ==="" || newDescription.trim() ===""){
+      setErrorMessage("All fields are required")
+      return
+    }
+
+    const response = await fetch("http://localhost:5000/api/tickets", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: newName,
+        email: newEmail,
+        title: newTitle,
+        category: newCategory,
+        priority: newPriority,
+        description: newDescription
+      })
+    }
+    )
+    const data = await response.json()
+    
+    if (!response.ok){
+      console.error("Error sending request", data)
+      setErrorMessage("Failed to create ticket")
+      return
+    }
+
+    setSuccessMessage("Ticket created successfully")
+
+    setNewName("")
+    setNewEmail("")
+    setNewTitle("")
+    setNewCategory("")
+    setNewPriority("")
+    setNewDescription("")
 
 
+    if (page === 1){
+      fetchTickets()
+    }
+    else{
+      setPage(1)
+    }
+
+
+  } catch (error){
+      setErrorMessage("Could not connect to server")
+    console.error("Could not connect to server", error)
+  }
+}
+
+async function handleDeleteTicket(ticketId){
+  setErrorMessage("")
+  setSuccessMessage("")
+
+  const response = await fetch(`http://localhost:5000/api/tickets/${ticketId}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }
+    )
+  response.json()
+
+  if(!response.ok){
+    console.error("Error sending request", data)
+    setErrorMessage("Failed to delete ticket")
+    return
+  }
+
+  if(){
+    fetchTickets
+  }
+    
+
+
+}
 useEffect (() => {
   fetchTickets();
 }, [page, limit])
@@ -50,6 +142,75 @@ useEffect (() => {
       className = "app"
     >
       <h1> IT Help Desk Ticket System </h1>
+
+      <div
+        className = "create-ticket-form">
+        
+        {errorMessage && <p>{errorMessage}</p>}
+        
+        {successMessage && <p>{successMessage}</p>}
+
+        <input
+          type = "text"
+          placeholder = "name"
+          value = {newName}
+          onChange={(event) => setNewName(event.target.value)}
+        
+        />
+
+        <input
+          type = "email"
+          placeholder = "email"
+          value = {newEmail}
+          onChange={(event) => setNewEmail(event.target.value)} 
+        />
+        
+        <input
+          type = "text"
+          placeholder = "title"
+          value = {newTitle}
+          onChange = {(event) => setNewTitle(event.target.value)}
+        />
+
+        <select
+          value = {newCategory}
+          onChange={(event) => setNewCategory(event.target.value)}>
+          <option value ="">Default</option>
+          <option value = "Hardware"> Hardware </option>
+          <option value = "Software"> Software </option>
+          <option value = "Network"> Network </option>
+          <option value = "Account"> Account </option>
+          <option value = "Other"> Other </option>
+
+        </select>
+        
+
+        <select
+          value = {newPriority}
+          onChange={(event) => setNewPriority(event.target.value)}>
+          <option value ="">Default</option>
+          <option value = "low"> Low </option>
+          <option value = "medium"> Medium </option>
+          <option value = "high"> High </option>
+          <option value = "urgent"> Urgent </option>
+        </select>
+
+        <textarea
+          placeholder = "type your description"
+          value = {newDescription}
+          onChange={(event) => setNewDescription(event.target.value)}
+          rows={4}
+          cols={50}
+        />
+
+        <button onClick={handleCreateTicket}>
+
+          Submit
+
+        </button>
+
+      </div>
+
       <div
         className = "search-section"
       >
@@ -144,7 +305,11 @@ useEffect (() => {
               <p>{ticket.status}</p>
               <p>{ticket.description}</p>
             </div>
+            
+
             ))
+
+            
           )
         }
         
