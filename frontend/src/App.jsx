@@ -24,19 +24,43 @@ function App() {
   const [errorMessage,setErrorMessage] = useState("")
   const [successMessage,setSuccessMessage] = useState("")
 
+  const [isLoadingTickets, setIsLoadingTickets] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [deletingTicketId, setDeletingTicketId] = useState(null)
+  const [updatingTicketId, setUpdatingTicketId] = useState(null)
 
-  async function fetchTickets(){
+  async function fetchTickets(options = {}){
+    const searchValue = options.search ?? search
+    const statusValue = options.status ?? status
+    const priorityValue = options.priority ?? priority
+    const categoryValue = options.category ?? category
+    const sortValue = options.sort ?? sort
+    const pageValue = options.page ?? page
+    const limitValue = options.limit ?? limit
+
     try{
-      const response = await fetch(`http://localhost:5000/api/tickets?search=${encodeURIComponent(search)}&status=${encodeURIComponent(status)}&priority=${encodeURIComponent(priority)}&category=${encodeURIComponent(category)}&sort=${encodeURIComponent(sort)}&page=${page}&limit=${limit}`)
+      setErrorMessage("")
+
+      setIsLoadingTickets(true)
+      const response = await fetch(`http://localhost:5000/api/tickets?search=${encodeURIComponent(searchValue)}&status=${encodeURIComponent(statusValue)}&priority=${encodeURIComponent(priorityValue)}&category=${encodeURIComponent(categoryValue)}&sort=${encodeURIComponent(sortValue)}&page=${pageValue}&limit=${limitValue}`)
 
       const data = await response.json()
-      console.log(data)
 
+      if(!response.ok){
+        console.error("Error fetching tickets", data)
+        setErrorMessage("Error fetching tickets")
+        return
+      }
+      console.log(data)
+      
       setTickets(data.tickets);
       setTotalPages(data.totalPages)
-
+      
   } catch(error) {
-    console.error("Error fetching tickets:", error)
+      console.error("Could not connect to server", error)
+      setErrorMessage("Could not connect to server")
+  } finally{
+      setIsLoadingTickets(false)
   }
 
 }
@@ -49,6 +73,25 @@ function handleSearch() {
   }
 }
 
+async function handleClearFilters(){
+  setSearch("")
+  setStatus("")
+  setPriority("")
+  setCategory("")
+  setSort("")
+  setPage(1)
+
+  await fetchTickets({
+    search: "",
+    status: "",
+    priority: "",
+    category: "",
+    sort: "",
+    page: 1,
+    limit: limit
+  })
+}
+
 async function handleCreateTicket() {
   try{
 
@@ -59,6 +102,9 @@ async function handleCreateTicket() {
       setErrorMessage("All fields are required")
       return
     }
+
+    setIsCreating(true)
+
 
     const response = await fetch("http://localhost:5000/api/tickets", {
       method: "POST",
@@ -94,7 +140,7 @@ async function handleCreateTicket() {
 
 
     if (page === 1){
-      fetchTickets()
+      await fetchTickets()
     }
     else{
       setPage(1)
@@ -104,11 +150,21 @@ async function handleCreateTicket() {
   } catch (error){
       setErrorMessage("Could not connect to server")
     console.error("Could not connect to server", error)
+  } finally {
+      setIsCreating(false)
+
   }
 }
 
 async function handleDeleteTicket(ticketId){
+  const confirmed = window.confirm("Are you sure you want to delete this ticket?")
+
+  if (!confirmed){
+    return
+  }
+
   try{
+    setDeletingTicketId(ticketId)
     setErrorMessage("")
     setSuccessMessage("")
 
@@ -125,17 +181,21 @@ async function handleDeleteTicket(ticketId){
       return
     }
 
-    fetchTickets()
+    await fetchTickets()
     setSuccessMessage("Ticket deleted successfully")
 
   } catch(error) {
     setErrorMessage("Failed to connect to server")
     console.error("Failed to connect to server", error)
+  } finally{
+    setDeletingTicketId(null)
   }
 }
 
 async function handleUpdateTicket(ticket, newStatus){
   try{
+
+    setUpdatingTicketId(ticket.id)
     setErrorMessage("")
     setSuccessMessage("")
     
@@ -165,13 +225,15 @@ async function handleUpdateTicket(ticket, newStatus){
   }
 
   else{
-    fetchTickets()
+    await fetchTickets()
     setSuccessMessage("Ticket updated successfully")
   }
 
 }catch(error){
   console.error("Error connecting to server")
   setErrorMessage("Error connecting to server")
+} finally {
+  setUpdatingTicketId(null)
 }
 }
 
@@ -245,9 +307,13 @@ useEffect (() => {
           cols={50}
         />
 
-        <button onClick={()=>handleCreateTicket()}>
+        <button 
+          onClick={()=>handleCreateTicket()}
+          disabled = {isCreating}
+          
+          >
 
-          Submit
+          {isCreating ? "Creating..." : "Submit"}
 
         </button>
 
@@ -320,8 +386,17 @@ useEffect (() => {
 
         </select>
 
-        <button onClick = {handleSearch}>
-          search
+        <button 
+        onClick = {handleSearch}
+        disabled = {isLoadingTickets}
+        >
+          {isLoadingTickets ? "Loading..." : "Search"}
+        </button>
+
+        <button
+        onClick={handleClearFilters}
+        >
+          Clear Filters
         </button>
 
       </div>
@@ -331,9 +406,12 @@ useEffect (() => {
         className = "ticket-list"
       > 
         {
-          tickets.length === 0 ? (
+          isLoadingTickets ? (
+            <p> Loading tickets... </p>
+          ) : tickets.length === 0 ? (
             <p>No tickets found.</p>
           ) : (
+
           tickets.map(ticket => 
             (
             <div 
@@ -348,6 +426,7 @@ useEffect (() => {
               <select 
               value={ticket.status}
               onChange={(event) => handleUpdateTicket(ticket, event.target.value)}
+              disabled = {updatingTicketId === ticket.id}
               >
                 <option value="open">Open</option>
                 <option value="in progress">In Progress</option>
@@ -356,8 +435,11 @@ useEffect (() => {
               </select>
               <p>{ticket.description}</p>
 
-              <button onClick={()=> handleDeleteTicket(ticket.id)}>
-                Delete
+              <button 
+              onClick={()=> handleDeleteTicket(ticket.id)}
+              disabled = {deletingTicketId === ticket.id}
+              >
+                {deletingTicketId === ticket.id ? "Deleting..." : "Delete"}
               </button>
             </div>
             
@@ -379,7 +461,7 @@ useEffect (() => {
           }
         }}
         
-        disabled = {page <= 1}>
+        disabled = {page <= 1 || isLoadingTickets}>
           Previous
         </button >
         
@@ -389,7 +471,7 @@ useEffect (() => {
           setPage(page + 1)
         }}
         
-        disabled = {page >= totalPages}>
+        disabled = {page >= totalPages || isLoadingTickets}>
 
           Next
         </button>
