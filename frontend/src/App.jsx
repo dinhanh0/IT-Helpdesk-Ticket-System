@@ -250,9 +250,9 @@ useEffect (() => {
       <div
         className = "create-ticket-form">
         
-        {errorMessage && <p>{errorMessage}</p>}
+        {errorMessage && <p className = "error-message">{errorMessage}</p>}
         
-        {successMessage && <p>{successMessage}</p>}
+        {successMessage && <p className = "success-message">{successMessage}</p>}
 
         <input
           type = "text"
@@ -308,6 +308,7 @@ useEffect (() => {
         />
 
         <button 
+          className = 'submit-button'
           onClick={()=>handleCreateTicket()}
           disabled = {isCreating}
           
@@ -394,6 +395,7 @@ useEffect (() => {
         </button>
 
         <button
+        className = 'clear-button'
         onClick={handleClearFilters}
         >
           Clear Filters
@@ -419,12 +421,12 @@ useEffect (() => {
             key = {ticket.id}
             >
               <h2>{ticket.title}</h2>
-              <p>{ticket.name}</p>
-              <p>{ticket.email}</p> 
-              <p>{ticket.category}</p>
-              <p>{ticket.priority}</p>
-              <select 
-              value={ticket.status}
+              <p>Name: {ticket.name}</p>
+              <p>Email: {ticket.email}</p> 
+              <p>Category: {ticket.category}</p>
+              <p>Priority: {ticket.priority}</p>
+              <p> Status: <select 
+              value= {ticket.status}
               onChange={(event) => handleUpdateTicket(ticket, event.target.value)}
               disabled = {updatingTicketId === ticket.id}
               >
@@ -432,10 +434,11 @@ useEffect (() => {
                 <option value="in progress">In Progress</option>
                 <option value="resolved">Resolved</option>
                 <option value="closed">Closed</option>
-              </select>
-              <p>{ticket.description}</p>
+              </select> </p>
+              <p>Description: {ticket.description}</p>
 
               <button 
+              className='delete-button'
               onClick={()=> handleDeleteTicket(ticket.id)}
               disabled = {deletingTicketId === ticket.id}
               >
