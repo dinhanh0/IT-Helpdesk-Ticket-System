@@ -187,3 +187,105 @@ button:disabled{
   padding: 4px;
   border-radius: 8px;
 }
+
+.ticket-assignment-section,
+.ticket-status-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+
+.ticket-assignment-section select,
+.ticket-status-section select {
+  width: auto;
+  min-width: 160px
+}
+
+
+.ticket-comments-section {
+  margin-top: 18px;
+  margin-bottom: 16px;
+}
+
+.ticket-comments-panel {
+  margin-top: 12px;
+  padding: 16px;
+  background-color: #f8fafc;
+  border: 1px solid lightgray;
+  border-radius: 8px;
+}
+
+.ticket-comments-panel h3 {
+  margin-top: 0;
+}
+
+.ticket-comments-panel textarea {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  resize: vertical;
+}
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.comment-card {
+  background-color: white;
+  padding: 12px;
+  border: 1px solid lightgray;
+  border-radius: 8px;
+}
+
+.comment-card p {
+  margin-top: 0;
+  white-space: pre-wrap;
+}
+
+.comment-card small {
+  color: #555555;
+}
+
+
+.ticket-activity-section {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.ticket-activity-panel {
+  margin-top: 12px;
+  padding: 16px;
+  background-color: #f8fafc;
+  border: 1px solid lightgray;
+  border-radius: 8px;
+}
+
+.ticket-activity-panel h3 {
+  margin-top: 0;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity-card {
+  background-color: white;
+  padding: 12px;
+  border-left: 4px solid steelblue;
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.activity-card p {
+  margin: 4px 0;
+}
+
+.activity-card small {
+  color: #555555;
+}

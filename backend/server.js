@@ -87,6 +87,7 @@ app.get("/api/tickets", async (req, res) => {
   const statusTerm = req.query.status;
   const priorityTerm = req.query.priority;
   const categoryTerm = req.query.category;
+  const assignedToTerm = req.query.assignedTo?.trim();
   const sortTerm = req.query.sort || "newest";
 
   const pageNumber = Number(req.query.page) || 1;
@@ -129,6 +130,16 @@ app.get("/api/tickets", async (req, res) => {
     });
   }
 
+  if(
+    assignedToTerm &&
+    assignedToTerm !== "unassigned" &&
+    assignedToTerm.length > 100
+  ) {
+    return res.status(400).json({
+      message: "assignedTo cannot be longer than 100 characters"
+    })
+  }
+
   if (!allowedSorts.includes(sortTerm)) {
     return res.status(400).json({
       message:
@@ -152,6 +163,13 @@ app.get("/api/tickets", async (req, res) => {
   if (categoryTerm) {
     filterValues.push(categoryTerm);
     conditions.push(`category = $${filterValues.length}`);
+  }
+
+  if (assignedToTerm === "unassigned"){
+    conditions.push("assigned_to IS NULL")
+  } else if (assignedToTerm) {
+    filterValues.push(assignedToTerm);
+    conditions.push(`assigned_to = $${filterValues.length}`)
   }
 
   if (searchTerm) {
@@ -238,6 +256,53 @@ app.get("/api/tickets", async (req, res) => {
   }
 });
 
+// GET all comments for one ticket.
+app.get("/api/tickets/:id/comments", async (req, res) => {
+
+  const ticketId = Number(req.params.id);
+
+  if (!Number.isInteger(ticketId) || ticketId < 1) {
+    return res.status(400).json({
+      message: "ticket ID must be a positive whole number"
+    })
+  }
+
+  try {
+    const ticketResult = await pool.query(
+      "SELECT id FROM tickets WHERE id = $1",
+      [ticketId]
+    );
+
+    if(ticketResult.rows.length === 0){
+      return res.status(404).json({
+        message: "No matching ticket found"
+      })
+    }
+
+    const commentsResult = await pool.query(
+      `
+        SELECT *
+        FROM ticket_comments
+        WHERE ticket_id = $1
+        ORDER BY created_at ASC
+      `,
+      [ticketId]
+    );
+
+    res.json({
+      ticketId,
+      count: commentsResult.rows.length,
+      comments: commentsResult.rows
+    })
+  } catch (error) {
+    console.error ("Error retrieving comments:", error);
+
+    res.status(500).json({
+      error: "Error retrieving ticket comments",
+    });
+  }
+})
+
 // GET one ticket.
 app.get("/api/tickets/:id", async (req, res) => {
   const ticketId = Number(req.params.id);
@@ -266,6 +331,117 @@ app.get("/api/tickets/:id", async (req, res) => {
 
     res.status(500).json({
       error: "Error retrieving ticket",
+    });
+  }
+});
+
+//GET activity history for one ticket
+app.get("/api/tickets/:id/activity", async (req, res) => {
+  const ticketId = Number(req.params.id);
+
+  if (!Number.isInteger(ticketId) || ticketId < 1) {
+    return res.status(400).json({
+      message: "Ticket ID must be a positive whole number"
+    })
+  }
+
+  try{
+    const ticketResult = await pool.query(
+      "SELECT id FROM tickets WHERE id = $1",
+      [ticketId]
+    );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "No matching ticket found"
+      })
+    }
+
+    const activityResult = await pool.query(
+      `
+        SELECT *
+        FROM ticket_activity
+        WHERE ticket_id = $1
+        ORDER BY created_at ASC, id ASC
+      `,
+      [ticketId]
+    );
+
+    res.json({
+      activity: activityResult.rows
+    })
+  } catch (error) {
+    console.error(
+      "Error retrieving ticket activity:", error
+    );
+
+    res.status(500).json({
+      error: "Error retrieving ticket activity"
+    })
+  }
+});
+
+// POST a new comment for one ticket.
+app.post("/api/tickets/:id/comments", async (req, res) => {
+  const ticketId = Number(req.params.id);
+  const { author, comment } = req.body;
+
+  if (!Number.isInteger(ticketId) || ticketId < 1) {
+    return res.status(400).json({
+      message: "Ticket ID must be a positive whole number",
+    });
+  }
+
+  if (!author?.trim() || !comment?.trim()) {
+    return res.status(400).json({
+      message: "Author and comment are required",
+    });
+  }
+
+  if (author.trim().length > 100) {
+    return res.status(400).json({
+      message: "Author cannot be longer than 100 characters",
+    });
+  }
+
+  try {
+    const ticketResult = await pool.query(
+      "SELECT id FROM tickets WHERE id = $1",
+      [ticketId]
+    );
+
+    if (ticketResult.rows.length === 0) {
+      return res.status(404).json({
+        message: "No matching ticket found",
+      });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO ticket_comments (
+          ticket_id,
+          author,
+          comment
+        )
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `,
+      [
+        ticketId,
+        author.trim(),
+        comment.trim(),
+      ]
+    );
+
+    res.status(201).json({
+      message: "Comment added successfully",
+      comment: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Error creating comment:", error);
+
+    res.status(500).json({
+      error: "Error creating ticket comment",
     });
   }
 });
@@ -332,17 +508,50 @@ app.post("/api/tickets", async (req, res) => {
     "open",
   ];
 
-  try {
-    const result = await pool.query(sqlQuery, values);
+  const client = await pool.connect();
 
-    res.status(201).json(result.rows[0]);
+  try {
+    await client.query("BEGIN")
+
+    const result = await pool.query(sqlQuery, values);
+    const newTicket = result.rows[0];
+
+    await client.query(
+      `
+        INSERT INTO ticket_activity(
+          ticket_id,
+          activity_type,
+          description,
+          performed_by
+        )
+        VALUES($1,$2,$3,$4)
+      
+      `,
+
+      [
+        newTicket.id,
+        "ticket_created",
+        "Ticket was created",
+        newTicket.name
+      ]
+
+    );
+
+    await client.query("COMMIT");
+
+    res.status(201).json(newTicket);
   } catch (error) {
+    await client.query("ROLLBACK");
+
     console.error("Error creating ticket:", error);
 
     res.status(500).json({
       error: "Error creating a ticket",
     });
+  }finally {
+    client.release();
   }
+
 });
 
 // PUT supports partial updates.
@@ -364,6 +573,7 @@ app.put("/api/tickets/:id", async (req, res) => {
     description,
     priority,
     status,
+    assigned_to,
   } = req.body;
 
   if (
@@ -375,6 +585,7 @@ app.put("/api/tickets/:id", async (req, res) => {
         "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'",
     });
   }
+
 
   if (
     priority !== undefined &&
@@ -396,6 +607,25 @@ app.put("/api/tickets/:id", async (req, res) => {
     });
   }
 
+  if (
+    assigned_to !== undefined &&
+    assigned_to !== null &&
+    typeof assigned_to !== "string"
+  ) {
+    return res.status(400).json({
+      message: "assigned_to must be a string or null",
+    })
+  }
+
+  if (
+    typeof assigned_to === "string" &&
+    assigned_to.trim().length > 100
+  ) {
+    return res.status(400).json({
+      message: "assigned_to cannot be longer than 100 characters",
+    })
+  }
+
   try {
     const existingResult = await pool.query(
       "SELECT * FROM tickets WHERE id = $1",
@@ -410,14 +640,21 @@ app.put("/api/tickets/:id", async (req, res) => {
 
     const existingTicket = existingResult.rows[0];
 
+    const normalizedAssignedTo = 
+      assigned_to === undefined
+        ? existingTicket.assigned_to
+        : assigned_to?.trim() || null; // ?. is optional chaining. Call .trim() only when assigned_to is not null or undefined.
+
     const updatedTicket = {
       name: name ?? existingTicket.name,
       email: email ?? existingTicket.email,
       title: title ?? existingTicket.title,
       category: category ?? existingTicket.category,
-      description: description ?? existingTicket.description,
+      description: 
+        description ?? existingTicket.description,
       priority: priority ?? existingTicket.priority,
       status: status ?? existingTicket.status,
+      assigned_to: normalizedAssignedTo,
     };
 
     if (
@@ -441,8 +678,15 @@ app.put("/api/tickets/:id", async (req, res) => {
         description = $5,
         priority = $6,
         status = $7,
+        assigned_to = $8::VARCHAR(100),
+        assigned_at = CASE
+          WHEN $8::text IS NULL THEN NULL
+          WHEN assigned_to IS DISTINCT FROM $8::VARCHAR(100)
+            THEN CURRENT_TIMESTAMP
+            ELSE assigned_at
+        END,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8
+      WHERE id = $9
       RETURNING *
     `;
 
@@ -454,15 +698,91 @@ app.put("/api/tickets/:id", async (req, res) => {
       updatedTicket.description.trim(),
       updatedTicket.priority,
       updatedTicket.status,
+      updatedTicket.assigned_to,
       ticketId,
     ];
 
-    const result = await pool.query(updateQuery, values);
+    const activityEntries = [];
+    const performedBy = "Anh Dinh"
 
-    res.json({
-      message: "Ticket updated successfully",
-      ticket: result.rows[0],
-    });
+    if(updatedTicket.status !== existingTicket.status){
+      activityEntries.push({
+        activityType: "status_changed",
+        description: `status changed from ${existingTicket.status} to ${updatedTicket.status}`
+      })
+    }
+
+    if(
+      existingTicket.assigned_to === null &&
+      updatedTicket.assigned_to !== null
+    ) {
+      activityEntries.push({
+        activityType: "assigned",
+        description: `Ticket assigned to ${updatedTicket.assigned_to}`
+      });
+    } else if (
+      existingTicket.assigned_to !== null &&
+      updatedTicket.assigned_to === null
+    ) {
+      activityEntries.push({
+        activityType: "unassigned",
+        description: `Ticket unassigned from ${existingTicket.assigned_to}`
+      })
+    } else if (
+      existingTicket.assigned_to !== null &&
+      updatedTicket.assigned_to !== null &&
+      existingTicket.assigned_to !== updatedTicket.assigned_to
+    ) {
+      activityEntries.push({
+        activityType: "reassigned",
+        description: `Ticket reassigned from ${existingTicket.assigned_to} to ${updatedTicket.assigned_to}`
+      })
+    }
+
+    const client = await pool.connect();
+
+    try{
+      await client.query("BEGIN")
+      
+      const result = await client.query(
+        updateQuery,
+        values
+      )
+
+      for (const activity of activityEntries) {
+        await client.query(
+
+          `
+            INSERT INTO ticket_activity(
+              ticket_id,
+              activity_type,
+              description,
+              performed_by
+            )
+            VALUES ($1,$2,$3,$4)
+          `,
+          [
+            ticketId,
+            activity.activityType,
+            activity.description,
+            performedBy
+          ]
+        )
+      }
+
+      await client.query("COMMIT")
+
+      res.json({
+        message: "Ticket updated successfully",
+        ticket: result.rows[0]
+      })
+    } catch (error) {
+      await client.query ("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
   } catch (error) {
     console.error("Error updating ticket:", error);
 
