@@ -50,6 +50,58 @@ function TechnicianPage({ ticketRefresh }) {
   const [loadingActivityTicketId, setLoadingActivityTicketId] = useState(null);
   const [openActivityTicketId, setOpenActivityTicketId] = useState(null)
 
+  const [analytics, setAnalytics] = useState({
+    total_tickets: 0,
+    open_tickets: 0,
+    in_progress_tickets: 0,
+    resolved_tickets: 0,
+    closed_tickets: 0,
+    urgent_tickets: 0,
+    unassigned_tickets: 0,
+    average_resolution_hours: null
+  })
+
+  const [isLoadingAnalytics, setIsloadingAnalytics] = useState(false)
+
+  const fetchAnalytics = useCallback(async () => {
+    setIsloadingAnalytics(true);
+
+    try{
+      const response = await fetch (
+        `${API_URL}/api/tickets/analytics`
+      );
+
+      const data = await response.json();
+
+      if(!response.ok){
+        throw new Error(
+          data.message ||
+            data.error ||
+            "Unable to retrieve ticket analytics"
+        )
+      }
+
+      setAnalytics({
+        total_tickets: data.total_tickets || 0,
+        open_tickets: data.open_tickets || 0,
+        in_progress_tickets:
+          data.in_progress_tickets || 0,
+        resolved_tickets: data.resolved_tickets || 0,
+        closed_tickets: data.closed_tickets || 0,
+        urgent_tickets: data.urgent_tickets || 0,
+        unassigned_tickets:
+          data.unassigned_tickets || 0,
+        average_resolution_hours: data.average_resolution_hours,
+      });
+    } catch (error) {
+      console.error(
+        "Error fetching analytics:", error
+      )
+    } finally {
+      setIsloadingAnalytics(false);
+    }
+  }, []);
+
   const fetchTickets = useCallback(async () => {
     setIsLoadingTickets(true);
     setErrorMessage("");
@@ -180,6 +232,8 @@ function TechnicianPage({ ticketRefresh }) {
 
       setSuccessMessage("Ticket deleted successfully.");
 
+      await fetchAnalytics();
+
       if (tickets.length === 1 && page > 1) {
         setPage((previousPage) => previousPage - 1);
       } else {
@@ -238,6 +292,9 @@ function TechnicianPage({ ticketRefresh }) {
       setSuccessMessage(
         "Ticket status updated successfully."
       );
+
+      await fetchAnalytics();
+
 
       if (openActivityTicketId === ticket.id) {
         await fetchTicketActivity(ticket.id);
@@ -299,6 +356,9 @@ function TechnicianPage({ ticketRefresh }) {
           ? "Ticket assigned successfully."
           : "Ticket unassigned successfully."
       );
+
+      await fetchAnalytics();
+
 
       if (openActivityTicketId === ticket.id) {
         await fetchTicketActivity(ticket.id);
@@ -504,7 +564,14 @@ function TechnicianPage({ ticketRefresh }) {
 
   useEffect(() => {
     fetchTickets();
-  }, [page, limit, ticketRefresh]);
+    fetchAnalytics();
+  }, [
+    page, 
+    limit, 
+    ticketRefresh, 
+    fetchTickets, 
+    fetchAnalytics
+  ]);
 
   function formatActivityType(activityType) {
     return activityType
@@ -517,10 +584,171 @@ function TechnicianPage({ ticketRefresh }) {
       .join(" ");
   }
 
+  function formatDuration(milliseconds) {
+    const totalMinutes = Math.max(
+      0,
+      Math.floor(milliseconds / 60000)
+    );
+
+    const days = Math.floor(
+      totalMinutes / 1440
+    );
+
+    const hours = Math.floor(
+      (totalMinutes % 1440) / 60
+    );
+
+    const minutes = totalMinutes % 60;
+
+    const parts = [];
+
+    if (days > 0) {
+      parts.push(`${days}d`);
+    }
+
+    if (hours > 0) {
+      parts.push(`${hours}h`);
+    }
+
+    if (minutes > 0 || parts.length === 0) {
+      parts.push(`${minutes}m`);
+    }
+
+    return parts.join(" ");
+  }
+
+  function getSlaDetails(ticket) {
+    if (!ticket.sla_due_at || !ticket.created_at) {
+      return {
+        label: "No SLA",
+        className: "sla-none",
+        timeText: "No deadline available",
+      };
+    }
+
+    if (
+      ticket.status === "resolved" ||
+      ticket.status === "closed"
+    ) {
+      return {
+        label: "Completed",
+        className: "sla-completed",
+        timeText: ticket.resolved_at
+          ? `Completed ${new Date(
+              ticket.resolved_at
+            ).toLocaleString()}`
+          : "Ticket completed",
+      };
+    }
+
+    const now = new Date();
+    const createdAt = new Date(ticket.created_at);
+    const dueAt = new Date(ticket.sla_due_at);
+
+    const totalWindow =
+      dueAt.getTime() - createdAt.getTime();
+
+    const remainingTime =
+      dueAt.getTime() - now.getTime();
+
+    if (remainingTime <= 0) {
+      return {
+        label: "Breached",
+        className: "sla-breached",
+        timeText: `Deadline passed ${formatDuration(
+          Math.abs(remainingTime)
+        )} ago`,
+      };
+    }
+
+    const remainingPercentage =
+      totalWindow > 0
+        ? remainingTime / totalWindow
+        : 0;
+
+    if (remainingPercentage <= 0.25) {
+      return {
+        label: "At Risk",
+        className: "sla-at-risk",
+        timeText: `${formatDuration(
+          remainingTime
+        )} remaining`,
+      };
+    }
+
+    return {
+      label: "On Track",
+      className: "sla-on-track",
+      timeText: `${formatDuration(
+        remainingTime
+      )} remaining`,
+    };
+  }
+
   return (
     <div className="technician-page">
       <h1>Technician Portal</h1>
       <p>Manage support tickets</p>
+      
+      <section className="analytics-section">
+        <h2>Ticket Dashboard</h2>
+
+        {isLoadingAnalytics ? (
+          <p>Loading dashboard...</p>
+        ) : (
+          <div className="analytics-grid">
+            <div className="analytics-card">
+              <span>Total Tickets</span>
+              <strong>{analytics.total_tickets}</strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>Open</span>
+              <strong>{analytics.open_tickets}</strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>In Progress</span>
+              <strong>
+                {analytics.in_progress_tickets}
+              </strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>Resolved</span>
+              <strong>{analytics.resolved_tickets}</strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>Closed</span>
+              <strong>{analytics.closed_tickets}</strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>Urgent</span>
+              <strong>{analytics.urgent_tickets}</strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>Unassigned</span>
+              <strong>
+                {analytics.unassigned_tickets}
+              </strong>
+            </div>
+
+            <div className="analytics-card">
+              <span>Avg. Resolution Time</span>
+              <strong>
+                {analytics.average_resolution_hours === null
+                  ? "N/A"
+                  : `${Number(
+                      analytics.average_resolution_hours
+                    ).toFixed(2)} hrs`}
+              </strong>
+            </div>
+          </div>
+        )}
+      </section>
 
       {errorMessage && (
         <p className="error-message">{errorMessage}</p>
@@ -663,6 +891,34 @@ function TechnicianPage({ ticketRefresh }) {
                 <strong>Priority:</strong>{" "}
                 {ticket.priority}
               </p>
+              
+              {(() => {
+                const slaDetails = getSlaDetails(ticket);
+
+                return (
+                  <div className="ticket-sla-section">
+                    <div>
+                      <strong>SLA Status:</strong>{" "}
+                      <span
+                        className={`sla-badge ${slaDetails.className}`}
+                      >
+                        {slaDetails.label}
+                      </span>
+                    </div>
+
+                    <p>
+                      <strong>SLA deadline:</strong>{" "}
+                      {ticket.sla_due_at
+                        ? new Date(
+                            ticket.sla_due_at
+                          ).toLocaleString()
+                        : "Not available"}
+                    </p>
+
+                    <small>{slaDetails.timeText}</small>
+                  </div>
+                );
+              })()}
 
               <p>
                 <strong>Description:</strong>{" "}

@@ -303,6 +303,63 @@ app.get("/api/tickets/:id/comments", async (req, res) => {
   }
 })
 
+//GET ticket dashboard analytic
+app.get("/api/tickets/analytics", async (req, res) => {
+  try{
+    const result = await pool.query (`
+      SELECT
+        COUNT(*)::INTEGER as total_tickets,
+
+        COUNT(*) FILTER (
+          WHERE status = 'open'
+        )::INTEGER AS open_tickets,
+
+        COUNT(*) FILTER (
+          WHERE status = 'in progress'
+        )::INTEGER AS in_progress_tickets,
+        COUNT(*) FILTER (
+          WHERE status = 'resolved'
+        )::INTEGER AS resolved_tickets,
+
+        COUNT(*) FILTER (
+          WHERE status = 'closed'
+        )::INTEGER AS closed_tickets,
+
+        COUNT(*) FILTER (
+          WHERE priority = 'urgent'
+        )::INTEGER AS urgent_tickets,
+
+        COUNT(*) FILTER (
+          WHERE assigned_to IS NULL
+        )::INTEGER AS unassigned_tickets,
+
+        ROUND(
+          AVG(
+            EXTRACT(
+              EPOCH FROM (resolved_at - created_at)
+            ) / 3600
+          ) FILTER (
+            WHERE resolved_at IS NOT NULL
+          )::NUMERIC,
+          2
+        ) AS average_resolution_hours
+      FROM tickets
+    `);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(
+      "Error retrieving ticket analytics:",
+      error
+    );
+
+    res.status(500).json({
+      error: "Error retrieving ticket analytics",
+    });
+  }
+});
+
+
 // GET one ticket.
 app.get("/api/tickets/:id", async (req, res) => {
   const ticketId = Number(req.params.id);
@@ -492,9 +549,26 @@ app.post("/api/tickets", async (req, res) => {
       category,
       description,
       priority,
-      status
+      status,
+      sla_due_at
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    VALUES (
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      CURRENT_TIMESTAMP +
+        CASE $6::VARCHAR
+          WHEN 'urgent' THEN INTERVAL '4 hours'
+          WHEN 'high' THEN INTERVAL '8 hours'
+          WHEN 'medium' THEN INTERVAL '24 hours'
+          WHEN 'low' THEN INTERVAL '72 hours'
+          ELSE INTERVAL '72 hours'
+        END
+    )
     RETURNING *
   `;
 
@@ -677,7 +751,32 @@ app.put("/api/tickets/:id", async (req, res) => {
         category = $4,
         description = $5,
         priority = $6,
+
+        sla_due_at = CASE
+          WHEN priority IS DISTINCT FROM $6::text
+            THEN created_at +
+              CASE $6::text
+                WHEN 'urgent' THEN INTERVAL '4 hours'
+                WHEN 'high' THEN INTERVAL '8 hours'
+                WHEN 'medium' THEN INTERVAL '24 hours'
+                WHEN 'low' THEN INTERVAL '72 hours'
+                ELSE INTERVAL '72 hours'
+              END
+          ELSE sla_due_at
+        END,
         status = $7,
+
+        resolved_at = CASE
+          WHEN $7::text IN('resolved, 'closed')
+            AND status NOT IN('resolved', 'closed')
+            THEN CURRENT_TIMESTAMP
+          
+            WHEN $7::text NOT IN ('resolved', 'closed')
+              THEN NULL
+            
+            ELSE resolved_at
+          END,
+
         assigned_to = $8::VARCHAR(100),
         assigned_at = CASE
           WHEN $8::text IS NULL THEN NULL
