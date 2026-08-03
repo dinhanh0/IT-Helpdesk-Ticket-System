@@ -587,7 +587,7 @@ app.post("/api/tickets", async (req, res) => {
   try {
     await client.query("BEGIN")
 
-    const result = await pool.query(sqlQuery, values);
+    const result = await client.query(sqlQuery, values);
     const newTicket = result.rows[0];
 
     await client.query(
@@ -753,9 +753,9 @@ app.put("/api/tickets/:id", async (req, res) => {
         priority = $6,
 
         sla_due_at = CASE
-          WHEN priority IS DISTINCT FROM $6::text
+          WHEN priority IS DISTINCT FROM $6::VARCHAR
             THEN created_at +
-              CASE $6::text
+              CASE $6::VARCHAR
                 WHEN 'urgent' THEN INTERVAL '4 hours'
                 WHEN 'high' THEN INTERVAL '8 hours'
                 WHEN 'medium' THEN INTERVAL '24 hours'
@@ -764,26 +764,29 @@ app.put("/api/tickets/:id", async (req, res) => {
               END
           ELSE sla_due_at
         END,
+
         status = $7,
 
         resolved_at = CASE
-          WHEN $7::text IN('resolved, 'closed')
-            AND status NOT IN('resolved', 'closed')
+          WHEN $7::VARCHAR IN ('resolved', 'closed')
+            AND status NOT IN ('resolved', 'closed')
             THEN CURRENT_TIMESTAMP
-          
-            WHEN $7::text NOT IN ('resolved', 'closed')
-              THEN NULL
-            
-            ELSE resolved_at
-          END,
+
+          WHEN $7::VARCHAR NOT IN ('resolved', 'closed')
+            THEN NULL
+
+          ELSE resolved_at
+        END,
 
         assigned_to = $8::VARCHAR(100),
+
         assigned_at = CASE
-          WHEN $8::text IS NULL THEN NULL
+          WHEN $8::VARCHAR(100) IS NULL THEN NULL
           WHEN assigned_to IS DISTINCT FROM $8::VARCHAR(100)
             THEN CURRENT_TIMESTAMP
-            ELSE assigned_at
+          ELSE assigned_at
         END,
+
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $9
       RETURNING *
