@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const pool = require("./db");
 
+const bcrypt = require("bcrypt");
+const jwt = require ("jsonwebtoken");
+
 const app = express();
 
 const PORT = process.env.PORT || 5000;
@@ -57,6 +60,66 @@ app.use(
   })
 );
 
+
+async function authenticateToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  const token = authHeader?.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({
+      message: "Authentication required",
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    const result = await pool.query(
+      `
+        SELECT
+          id,
+          name,
+          email,
+          role
+        FROM users
+        WHERE id = $1
+      `,
+      [decoded.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        message: "User account not found",
+      });
+    }
+
+    req.user = result.rows[0];
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      message: "Invalid or expired token",
+    });
+  }
+}
+
+function requireTechnician(req,res,next) {
+  if (
+    req.user.role !== "technician" && 
+    req.user.role !== "admin"
+  ) {
+    return res.status(403).json({
+      message: "Technician access required"
+    })
+  }
+
+  next()
+}
+
 app.use(express.json());
 
 app.get("/", (req, res) => {
@@ -80,6 +143,231 @@ app.get("/api/health", async (req, res) => {
     });
   }
 });
+
+// Register a new user
+app.post("/api/auth/register", async (req, res) => {
+  const{
+    name,
+    email,
+    password,
+  } = req.body
+
+  if (
+    !name?.trim() || //Only call .trim() if name exists.
+    !email?.trim() ||
+    !password
+  ) {
+    return res.status(400).json({
+      message: "Name, email, and password are required"
+    })
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (name.trim().length > 100) {
+    return res.status(400).json({
+      message: "Name cannot be longer than 100 characters"
+    })
+  }
+
+  if(normalizedEmail.length > 255) {
+    return res.status(400).json({
+      message: "Name cannot be longer than 100 characters"
+    })
+  }
+
+
+  if (password.length < 8) {
+    return res.status(400).json({
+      message: "Password must be at least 8 characters long"
+    })
+  }
+
+  try{
+    const existingUser = await pool.query (
+      `
+        SELECT id 
+        FROM users
+        WHERE LOWER(email) = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({
+        message: "An account with that email already exists"
+      })
+    }
+
+    const passwordHash = await bcrypt.hash(
+      password,
+      12
+    );
+
+    const result = await pool.query (
+      `
+        INSERT INTO users (
+          name,
+          email,
+          password_hash,
+          role  
+        )
+
+        VALUES ($1,$2,$3,$4)
+        RETURNING 
+          id,
+          name,
+          email,
+          role,
+          created_at
+      `,
+      [
+        name.trim(),
+        normalizedEmail,
+        passwordHash,
+        "user"
+      ]
+    );
+
+    res.status(201).json({
+      message: "Account created successfully",
+      user: result.rows[0]
+    })
+  } catch (error) {
+    console.error("Error registering user:", error)
+
+    if (error.code === "23505") {
+      return res.status(409).json({
+        message: "An account with that email already exists"
+      })
+    }
+
+    res.status (500).json({
+      error: "Error creating user account"
+    })
+  }
+})
+
+app.post("/api/auth/login", async (req,res) => {
+  const{
+    email,
+    password,
+  } = req.body;
+
+  if(!email?.trim() || !password){
+    return res.status(400).json({
+      message: "Email and password are required"
+    })
+  }
+
+  const normalizedEmail = email.trim().toLowerCase()
+
+  try {
+    const result = await pool.query (
+      `
+        SELECT
+          id,
+          name,
+          email,
+          password_hash,
+          role,
+          created_at
+        FROM users
+        WHERE LOWER(email) = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if( result.rows.length === 0){
+      return res.status(401).json({
+        message: "Invalid email or password"
+      })
+    }
+
+    const user = result.rows[0];
+
+    const passwordMatches = await bcrypt.compare (
+      password,
+      user.password_hash
+    );
+
+    if (!passwordMatches) {
+      return res.status(401).json({
+        message: "Invalid email or password"
+      });
+    }
+
+    const token = jwt.sign (
+      {
+        userId: user.id,
+        role: user.role
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "8h"
+      }
+    );
+
+    res.json({
+      message: "Login successful",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        created_at: user.created_at
+      }
+    })
+  } catch (error) {
+    console.error("Error logging in:", error);
+
+    res.status(500).json({
+      error: "Error logging in"
+    })
+  }
+})
+
+app.get(
+  "/api/auth/me",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+          SELECT
+            id,
+            name,
+            email,
+            role,
+            created_at
+          FROM users
+          WHERE id = $1
+        `,
+        [req.user.id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: "User account not found",
+        });
+      }
+
+      res.json({
+        user: result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Error retrieving authenticated user:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error retrieving user account",
+      });
+    }
+  }
+);
 
 // GET all tickets with filters, sorting, and pagination.
 app.get("/api/tickets", async (req, res) => {
@@ -257,7 +545,7 @@ app.get("/api/tickets", async (req, res) => {
 });
 
 // GET all comments for one ticket.
-app.get("/api/tickets/:id/comments", async (req, res) => {
+app.get("/api/tickets/:id/comments", authenticateToken, requireTechnician, async (req, res) => {
 
   const ticketId = Number(req.params.id);
 
@@ -304,7 +592,7 @@ app.get("/api/tickets/:id/comments", async (req, res) => {
 })
 
 //GET ticket dashboard analytic
-app.get("/api/tickets/analytics", async (req, res) => {
+app.get("/api/tickets/analytics", authenticateToken, requireTechnician, async (req, res) => {
   try{
     const result = await pool.query (`
       SELECT
@@ -393,7 +681,7 @@ app.get("/api/tickets/:id", async (req, res) => {
 });
 
 //GET activity history for one ticket
-app.get("/api/tickets/:id/activity", async (req, res) => {
+app.get("/api/tickets/:id/activity", authenticateToken, requireTechnician, async (req, res) => {
   const ticketId = Number(req.params.id);
 
   if (!Number.isInteger(ticketId) || ticketId < 1) {
@@ -439,9 +727,10 @@ app.get("/api/tickets/:id/activity", async (req, res) => {
 });
 
 // POST a new comment for one ticket.
-app.post("/api/tickets/:id/comments", async (req, res) => {
+app.post("/api/tickets/:id/comments", authenticateToken, requireTechnician, async (req, res) => {
   const ticketId = Number(req.params.id);
-  const { author, comment } = req.body;
+  const {comment} = req.body;
+  const author = req.user.name
 
   if (!Number.isInteger(ticketId) || ticketId < 1) {
     return res.status(400).json({
@@ -449,17 +738,12 @@ app.post("/api/tickets/:id/comments", async (req, res) => {
     });
   }
 
-  if (!author?.trim() || !comment?.trim()) {
+  if (!comment?.trim()) {
     return res.status(400).json({
-      message: "Author and comment are required",
+      message: "Comment is required",
     });
   }
 
-  if (author.trim().length > 100) {
-    return res.status(400).json({
-      message: "Author cannot be longer than 100 characters",
-    });
-  }
 
   try {
     const ticketResult = await pool.query(
@@ -805,7 +1089,7 @@ app.put("/api/tickets/:id", async (req, res) => {
     ];
 
     const activityEntries = [];
-    const performedBy = "Anh Dinh"
+    const performedBy = req.user.name;
 
     if(updatedTicket.status !== existingTicket.status){
       activityEntries.push({
@@ -895,7 +1179,7 @@ app.put("/api/tickets/:id", async (req, res) => {
 });
 
 // DELETE a ticket.
-app.delete("/api/tickets/:id", async (req, res) => {
+app.delete("/api/tickets/:id", authenticateToken, requireTechnician, async (req, res) => {
   const ticketId = Number(req.params.id);
 
   if (!Number.isInteger(ticketId) || ticketId < 1) {
