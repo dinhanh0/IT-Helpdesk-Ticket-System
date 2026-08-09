@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "../config";
 
 function TechnicianPage({ ticketRefresh }) {
+  const token = localStorage.getItem("token")
+
   const [tickets, setTickets] = useState([]);
 
   const [search, setSearch] = useState("");
@@ -63,12 +65,54 @@ function TechnicianPage({ ticketRefresh }) {
 
   const [isLoadingAnalytics, setIsloadingAnalytics] = useState(false)
 
+  const [technicians, setTechnicians] = useState([])
+
+  const fetchTechicians = useCallback(async () => {
+    try {
+      const response = await fetch (
+        `${API_URL}/api/users/technicians`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      )
+
+      const data = await response.json();
+
+      if(!response.ok){
+        throw new Error (
+          data.message ||
+            data.error ||
+            "Unable to retrieve technicians."
+        )
+      }
+
+      setTechnicians(data.technicians || [])
+    } catch(error) {
+      console.error(
+        "Error fetching technicians:",
+        error
+      )
+
+      setErrorMessage(
+        error.message || 
+          "Unable to retrieve technicians"
+      )
+    }
+  }, [token])
+
   const fetchAnalytics = useCallback(async () => {
     setIsloadingAnalytics(true);
 
     try{
       const response = await fetch (
-        `${API_URL}/api/tickets/analytics`
+        `${API_URL}/api/tickets/analytics`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
 
       const data = await response.json();
@@ -100,7 +144,7 @@ function TechnicianPage({ ticketRefresh }) {
     } finally {
       setIsloadingAnalytics(false);
     }
-  }, []);
+  }, [token]);
 
   const fetchTickets = useCallback(async () => {
     setIsLoadingTickets(true);
@@ -130,7 +174,12 @@ function TechnicianPage({ ticketRefresh }) {
       queryParams.append("limit", String(limit));
 
       const response = await fetch(
-        `${API_URL}/api/tickets?${queryParams.toString()}`
+        `${API_URL}/api/tickets?${queryParams.toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
 
       const data = await response.json();
@@ -167,6 +216,7 @@ function TechnicianPage({ ticketRefresh }) {
     sort,
     page,
     limit,
+    token,
   ]);
 
   function handleSearch(event) {
@@ -217,6 +267,9 @@ function TechnicianPage({ ticketRefresh }) {
         `${API_URL}/api/tickets/${ticketId}`,
         {
           method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         }
       );
 
@@ -262,6 +315,7 @@ function TechnicianPage({ ticketRefresh }) {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
             status: newStatus,
@@ -310,13 +364,15 @@ function TechnicianPage({ ticketRefresh }) {
     }
   }
   
-  async function handleAssignTicket(ticket, newAssignedTo) {
+  async function handleAssignTicket(ticket, newAssignedToUserId) {
     setAssigningTicketId(ticket.id);
     setErrorMessage("");
     setSuccessMessage("");
 
-    const assignedToValue = 
-      newAssignedTo === "" ?null : newAssignedTo;
+    const assignedToUserId = 
+      newAssignedToUserId === ""
+        ? null
+        : Number(newAssignedToUserId);
 
     try{
       const response = await fetch (
@@ -325,9 +381,10 @@ function TechnicianPage({ ticketRefresh }) {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
-            assigned_to: assignedToValue,
+            assigned_to_user_id: assignedToUserId,
           })
         }
       )
@@ -341,18 +398,10 @@ function TechnicianPage({ ticketRefresh }) {
         )
       }
 
-      const updatedTicket = data.ticket;
-
-      setTickets((currentTicket) =>
-        currentTicket.map((currentTicket) =>
-          currentTicket.id === ticket.id
-            ? updatedTicket
-            : currentTicket
-        )   
-      )
+      await fetchTickets();
 
       setSuccessMessage(
-        assignedToValue
+        assignedToUserId
           ? "Ticket assigned successfully."
           : "Ticket unassigned successfully."
       );
@@ -394,7 +443,12 @@ function TechnicianPage({ ticketRefresh }) {
 
     try {
       const response = await fetch(
-        `${API_URL}/api/tickets/${ticketId}/comments`
+        `${API_URL}/api/tickets/${ticketId}/comments`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
 
       const data = await response.json();
@@ -468,9 +522,9 @@ function TechnicianPage({ ticketRefresh }) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
           },
           body: JSON.stringify({
-            author: "Anh Dinh",
             comment: commentText,
           }),
         }
@@ -522,7 +576,12 @@ function TechnicianPage({ ticketRefresh }) {
 
     try{
       const response = await fetch(
-        `${API_URL}/api/tickets/${ticketId}/activity`
+        `${API_URL}/api/tickets/${ticketId}/activity`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       )
 
       const data = await response.json();
@@ -565,12 +624,14 @@ function TechnicianPage({ ticketRefresh }) {
   useEffect(() => {
     fetchTickets();
     fetchAnalytics();
+    fetchTechicians();
   }, [
     page, 
     limit, 
     ticketRefresh, 
     fetchTickets, 
-    fetchAnalytics
+    fetchAnalytics,
+    fetchTechicians
   ]);
 
   function formatActivityType(activityType) {
@@ -932,7 +993,7 @@ function TechnicianPage({ ticketRefresh }) {
 
                 <select
                   id = {`assignment-${ticket.id}`}
-                  value = {ticket.assigned_to || ""}
+                  value = {ticket.assigned_to_user_id || ""}
                   onChange ={(event) => 
                     handleAssignTicket(
                       ticket,
@@ -943,10 +1004,18 @@ function TechnicianPage({ ticketRefresh }) {
                     assigningTicketId === ticket.id
                   }
                 >
-                  <option value = "">Unassigned</option>
-                  <option value = "Anh Dinh" > Anh Dinh </option>
-                  <option value = "Technician 2"> Technician 2 </option>
-                  <option value = "Technician 3"> Technician 3 </option>
+                  <option value = ""> Unassigned</option>
+
+                  {technicians.map((technician) => (
+                    <option 
+                      key = {technician.id}
+                      value = {technician.id}
+                    >
+                      {technician.name}
+
+                    </option>
+                  ))}
+
                 </select>
 
                 {assigningTicketId === ticket.id && (
@@ -954,6 +1023,7 @@ function TechnicianPage({ ticketRefresh }) {
                 )}
 
               </div>
+
               
               <p>
                 <strong>Assigned at:</strong>{" "}
@@ -1207,4 +1277,10 @@ function TechnicianPage({ ticketRefresh }) {
   );
 }
 
+
 export default TechnicianPage;
+
+//Test technician account
+// "email": "anh@example.com",
+// "password": "Helpdesk123!"
+

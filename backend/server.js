@@ -144,6 +144,34 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+app.get("/api/users/technicians", authenticateToken, requireTechnician, async (req, res) => {
+  try{
+    const result = await pool.query( 
+      `
+        SELECT
+          id,
+          name, 
+          email
+        FROM users
+        WHERE role = 'technician'
+        ORDER BY name ASC
+      `);
+
+      res.json({
+        technicians: result.rows,
+      });
+    }catch (error) {
+      console.error(
+        "Error retrieving technician:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error retrieving technicians",
+      })
+    }
+})
+
 // Register a new user
 app.post("/api/auth/register", async (req, res) => {
   const{
@@ -370,7 +398,7 @@ app.get(
 );
 
 // GET all tickets with filters, sorting, and pagination.
-app.get("/api/tickets", async (req, res) => {
+app.get("/api/tickets", authenticateToken, requireTechnician, async (req, res) => {
   const searchTerm = req.query.search?.trim();
   const statusTerm = req.query.status;
   const priorityTerm = req.query.priority;
@@ -454,11 +482,22 @@ app.get("/api/tickets", async (req, res) => {
   }
 
   if (assignedToTerm === "unassigned"){
-    conditions.push("assigned_to IS NULL")
+    conditions.push("assigned_to_user_id IS NULL")
   } else if (assignedToTerm) {
-    filterValues.push(assignedToTerm);
-    conditions.push(`assigned_to = $${filterValues.length}`)
-  }
+      const assignedToUserId = Number(assignedToTerm);
+
+      if (!Number.isInteger(assignedToUserId)) {
+        return res.status(400).json({
+          message: "assignedTo must be a technician ID or 'unassigned'",
+        });
+      }
+
+      filterValues.push(assignedToUserId);
+
+      conditions.push(
+        `assigned_to_user_id = $${filterValues.length}`
+      );
+    }
 
   if (searchTerm) {
     filterValues.push(`%${searchTerm}%`);
@@ -501,8 +540,12 @@ app.get("/api/tickets", async (req, res) => {
   const offsetPlaceholder = `$${ticketValues.length}`;
 
   const ticketsQuery = `
-    SELECT *
+    SELECT
+      tickets.*,
+      users.name AS assigned_to_name
     FROM tickets
+    LEFT JOIN users
+      ON tickets.assigned_to_user_id = users.id
     ${whereClause}
     ORDER BY ${sortClauses[sortTerm]}
     LIMIT ${limitPlaceholder}
@@ -618,7 +661,7 @@ app.get("/api/tickets/analytics", authenticateToken, requireTechnician, async (r
         )::INTEGER AS urgent_tickets,
 
         COUNT(*) FILTER (
-          WHERE assigned_to IS NULL
+          WHERE assigned_to_user_id IS NULL
         )::INTEGER AS unassigned_tickets,
 
         ROUND(
@@ -914,7 +957,7 @@ app.post("/api/tickets", async (req, res) => {
 
 // PUT supports partial updates.
 // This allows the technician page to send only { status: "resolved" }.
-app.put("/api/tickets/:id", async (req, res) => {
+app.put("/api/tickets/:id", authenticateToken, requireTechnician, async (req, res) => {
   const ticketId = Number(req.params.id);
 
   if (!Number.isInteger(ticketId) || ticketId < 1) {
@@ -931,7 +974,7 @@ app.put("/api/tickets/:id", async (req, res) => {
     description,
     priority,
     status,
-    assigned_to,
+    assigned_to_user_id,
   } = req.body;
 
   if (
@@ -966,21 +1009,13 @@ app.put("/api/tickets/:id", async (req, res) => {
   }
 
   if (
-    assigned_to !== undefined &&
-    assigned_to !== null &&
-    typeof assigned_to !== "string"
+    assigned_to_user_id !== undefined && 
+    assigned_to_user_id !== null &&
+    !Number.isInteger(assigned_to_user_id)
   ) {
     return res.status(400).json({
-      message: "assigned_to must be a string or null",
-    })
-  }
-
-  if (
-    typeof assigned_to === "string" &&
-    assigned_to.trim().length > 100
-  ) {
-    return res.status(400).json({
-      message: "assigned_to cannot be longer than 100 characters",
+      message: 
+        "assigned_to_user_id must be a whole number or null"
     })
   }
 
@@ -998,10 +1033,51 @@ app.put("/api/tickets/:id", async (req, res) => {
 
     const existingTicket = existingResult.rows[0];
 
-    const normalizedAssignedTo = 
-      assigned_to === undefined
-        ? existingTicket.assigned_to
-        : assigned_to?.trim() || null; // ?. is optional chaining. Call .trim() only when assigned_to is not null or undefined.
+    let existingTechnicianName = null;
+
+    if (existingTicket.assigned_to_user_id !== null){
+      const existingTechnicianResult = await pool.query(
+        `
+          SELECT name
+          FROM users
+          WHERE id = $1
+        `,
+        [existingTicket.assigned_to_user_id]
+      );
+
+      existingTechnicianName = existingTechnicianResult.rows[0]?.name || null;
+    }
+
+    let assignedTechnician = null;
+
+    if (assigned_to_user_id !== undefined && assigned_to_user_id !== null) {
+      const technicianResult = await pool.query(
+        `
+          SELECT
+            id,
+            name,
+            email,
+            role
+          FROM users
+          WHERE id = $1
+            AND role IN ('technician', 'admin')
+        `,
+        [assigned_to_user_id]
+      );
+
+      if (technicianResult.rows.length === 0) {
+        return res.status(400).json({
+          message: "Selected technician does not exist",
+        })
+      }
+
+      assignedTechnician = technicianResult.rows[0]
+    }
+
+    const normalizedAssignedToUserId = 
+      assigned_to_user_id === undefined
+        ? existingTicket.assigned_to_user_id
+        : assigned_to_user_id;
 
     const updatedTicket = {
       name: name ?? existingTicket.name,
@@ -1012,7 +1088,7 @@ app.put("/api/tickets/:id", async (req, res) => {
         description ?? existingTicket.description,
       priority: priority ?? existingTicket.priority,
       status: status ?? existingTicket.status,
-      assigned_to: normalizedAssignedTo,
+      assigned_to_user_id: normalizedAssignedToUserId,
     };
 
     if (
@@ -1062,14 +1138,15 @@ app.put("/api/tickets/:id", async (req, res) => {
           ELSE resolved_at
         END,
 
-        assigned_to = $8::VARCHAR(100),
+        assigned_to_user_id = $8,
 
         assigned_at = CASE
-          WHEN $8::VARCHAR(100) IS NULL THEN NULL
-          WHEN assigned_to IS DISTINCT FROM $8::VARCHAR(100)
+          WHEN $8:: INTEGER IS NULL THEN NULL
+          WHEN assigned_to_user_id IS DISTINCT FROM $8::INTEGER
             THEN CURRENT_TIMESTAMP
           ELSE assigned_at
         END,
+        
 
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $9
@@ -1084,7 +1161,7 @@ app.put("/api/tickets/:id", async (req, res) => {
       updatedTicket.description.trim(),
       updatedTicket.priority,
       updatedTicket.status,
-      updatedTicket.assigned_to,
+      updatedTicket.assigned_to_user_id,
       ticketId,
     ];
 
@@ -1099,29 +1176,33 @@ app.put("/api/tickets/:id", async (req, res) => {
     }
 
     if(
-      existingTicket.assigned_to === null &&
-      updatedTicket.assigned_to !== null
+      existingTicket.assigned_to_user_id === null &&
+      updatedTicket.assigned_to_user_id !== null
     ) {
       activityEntries.push({
         activityType: "assigned",
-        description: `Ticket assigned to ${updatedTicket.assigned_to}`
+        description: 
+          `Ticket assigned to ${assignedTechnician.name}`,
       });
     } else if (
-      existingTicket.assigned_to !== null &&
-      updatedTicket.assigned_to === null
+      existingTicket.assigned_to_user_id !== null &&
+      updatedTicket.assigned_to_user_id === null
+
     ) {
       activityEntries.push({
         activityType: "unassigned",
-        description: `Ticket unassigned from ${existingTicket.assigned_to}`
+        description: 
+          `Ticket unassigned from ${existingTechnicianName}`,
       })
     } else if (
-      existingTicket.assigned_to !== null &&
-      updatedTicket.assigned_to !== null &&
-      existingTicket.assigned_to !== updatedTicket.assigned_to
+      existingTicket.assigned_to_user_id !== null &&
+      updatedTicket.assigned_to_user_id !== null &&
+      existingTicket.assigned_to_user_id !== updatedTicket.assigned_to_user_id
     ) {
       activityEntries.push({
         activityType: "reassigned",
-        description: `Ticket reassigned from ${existingTicket.assigned_to} to ${updatedTicket.assigned_to}`
+        description: 
+          `Ticket reassigned from ${existingTechnicianName} to ${assignedTechnician.name}`,
       })
     }
 

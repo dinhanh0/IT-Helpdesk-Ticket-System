@@ -2,10 +2,17 @@ import { useState } from "react";
 import "./App.css";
 import UserPage from "./pages/UserPage.jsx";
 import TechnicianPage from "./pages/TechnicianPage.jsx";
+import LoginPage from "./pages/LoginPage.jsx";
 
 function App() {
   const [currentPage, setCurrentPage] = useState("user");
   const [ticketRefresh, setTicketRefresh] = useState(0);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  function handleLogin(user){
+    setCurrentUser(user);
+    setCurrentPage("technician")
+  }
 
   function handleTicketCreated() {
     setTicketRefresh((previousValue) => previousValue + 1);
@@ -27,7 +34,11 @@ function App() {
 
           <button
             type="button"
-            onClick={() => setCurrentPage("technician")}
+            onClick={() => 
+              setCurrentPage(
+                currentUser ? "technician" : "login"
+              )
+            }
             disabled={currentPage === "technician"}
           >
             Technician Portal
@@ -38,6 +49,12 @@ function App() {
       <main>
         {currentPage === "user" && (
           <UserPage onTicketCreated={handleTicketCreated} />
+        )}
+
+        {currentPage === "login" && (
+          <LoginPage
+            onLogin = {handleLogin}
+          />
         )}
 
         {currentPage === "technician" && (
