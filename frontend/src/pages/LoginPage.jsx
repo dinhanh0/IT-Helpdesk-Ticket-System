@@ -79,6 +79,18 @@ function LoginPage({ onLogin }) {
                     Log in
                 </button>
             </form>
+
+            <div className="demo-account">
+            <h3>Demo Technician Account</h3>
+
+            <p>
+                <strong>Email:</strong> anh@example.com
+            </p>
+
+            <p>
+                <strong>Password:</strong> Helpdesk123!
+            </p>
+            </div>
         </div>
     );
 }
