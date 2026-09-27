@@ -588,51 +588,82 @@ app.get("/api/tickets", authenticateToken, requireTechnician, async (req, res) =
 });
 
 // GET all comments for one ticket.
-app.get("/api/tickets/:id/comments", authenticateToken, requireTechnician, async (req, res) => {
+// GET all comments for one ticket.
+// Regular users can view comments on their own tickets.
+// Technicians/admins can view comments on any ticket.
+app.get(
+  "/api/tickets/:id/comments",
+  authenticateToken,
+  async (req, res) => {
+    const ticketId = Number(req.params.id);
 
-  const ticketId = Number(req.params.id);
-
-  if (!Number.isInteger(ticketId) || ticketId < 1) {
-    return res.status(400).json({
-      message: "ticket ID must be a positive whole number"
-    })
-  }
-
-  try {
-    const ticketResult = await pool.query(
-      "SELECT id FROM tickets WHERE id = $1",
-      [ticketId]
-    );
-
-    if(ticketResult.rows.length === 0){
-      return res.status(404).json({
-        message: "No matching ticket found"
-      })
+    if (!Number.isInteger(ticketId) || ticketId < 1) {
+      return res.status(400).json({
+        message: "Ticket ID must be a positive whole number",
+      });
     }
 
-    const commentsResult = await pool.query(
-      `
-        SELECT *
-        FROM ticket_comments
-        WHERE ticket_id = $1
-        ORDER BY created_at ASC
-      `,
-      [ticketId]
-    );
+    try {
+      const ticketResult = await pool.query(
+        `
+          SELECT
+            id,
+            user_id
+          FROM tickets
+          WHERE id = $1
+        `,
+        [ticketId]
+      );
 
-    res.json({
-      ticketId,
-      count: commentsResult.rows.length,
-      comments: commentsResult.rows
-    })
-  } catch (error) {
-    console.error ("Error retrieving comments:", error);
+      if (ticketResult.rows.length === 0) {
+        return res.status(404).json({
+          message: "No matching ticket found",
+        });
+      }
 
-    res.status(500).json({
-      error: "Error retrieving ticket comments",
-    });
+      const ticket = ticketResult.rows[0];
+
+      const isTechnician =
+        req.user.role === "technician" ||
+        req.user.role === "admin";
+
+      const ownsTicket =
+        ticket.user_id === req.user.id;
+
+      if (!isTechnician && !ownsTicket) {
+        return res.status(403).json({
+          message:
+            "You do not have permission to view comments for this ticket",
+        });
+      }
+
+      const commentsResult = await pool.query(
+        `
+          SELECT *
+          FROM ticket_comments
+          WHERE ticket_id = $1
+          ORDER BY created_at ASC
+        `,
+        [ticketId]
+      );
+
+      res.json({
+        ticketId,
+        count: commentsResult.rows.length,
+        comments: commentsResult.rows,
+      });
+    } catch (error) {
+      console.error(
+        "Error retrieving comments:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error retrieving ticket comments",
+      });
+    }
   }
-})
+);
 
 //GET ticket dashboard analytic
 app.get("/api/tickets/analytics", authenticateToken, requireTechnician, async (req, res) => {
@@ -732,143 +763,239 @@ app.get(
 );
 
 // GET one ticket.
-app.get("/api/tickets/:id", async (req, res) => {
-  const ticketId = Number(req.params.id);
+// GET one ticket.
+// Regular users can only view their own tickets.
+// Technicians/admins can view any ticket.
+app.get(
+  "/api/tickets/:id",
+  authenticateToken,
+  async (req, res) => {
+    const ticketId = Number(req.params.id);
 
-  if (!Number.isInteger(ticketId) || ticketId < 1) {
-    return res.status(400).json({
-      message: "Ticket ID must be a positive whole number",
-    });
-  }
-
-  try {
-    const result = await pool.query(
-      "SELECT * FROM tickets WHERE id = $1",
-      [ticketId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        message: "No matching ticket found",
+    if (!Number.isInteger(ticketId) || ticketId < 1) {
+      return res.status(400).json({
+        message: "Ticket ID must be a positive whole number",
       });
     }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error("Error retrieving ticket:", error);
+    try {
+      const result = await pool.query(
+        `
+          SELECT
+            tickets.*,
+            assigned_user.name AS assigned_to_name
+          FROM tickets
 
-    res.status(500).json({
-      error: "Error retrieving ticket",
-    });
+          LEFT JOIN users AS assigned_user
+            ON tickets.assigned_to_user_id = assigned_user.id
+
+          WHERE tickets.id = $1
+        `,
+        [ticketId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          message: "No matching ticket found",
+        });
+      }
+
+      const ticket = result.rows[0];
+
+      const isTechnician =
+        req.user.role === "technician" ||
+        req.user.role === "admin";
+
+      const ownsTicket =
+        ticket.user_id === req.user.id;
+
+      if (!isTechnician && !ownsTicket) {
+        return res.status(403).json({
+          message:
+            "You do not have permission to view this ticket",
+        });
+      }
+
+      res.json(ticket);
+    } catch (error) {
+      console.error(
+        "Error retrieving ticket:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error retrieving ticket",
+      });
+    }
   }
-});
+);
 
 //GET activity history for one ticket
-app.get("/api/tickets/:id/activity", authenticateToken, requireTechnician, async (req, res) => {
-  const ticketId = Number(req.params.id);
+// GET activity history for one ticket.
+// Regular users can view activity on their own tickets.
+// Technicians/admins can view activity on any ticket.
+app.get(
+  "/api/tickets/:id/activity",
+  authenticateToken,
+  async (req, res) => {
+    const ticketId = Number(req.params.id);
 
-  if (!Number.isInteger(ticketId) || ticketId < 1) {
-    return res.status(400).json({
-      message: "Ticket ID must be a positive whole number"
-    })
-  }
-
-  try{
-    const ticketResult = await pool.query(
-      "SELECT id FROM tickets WHERE id = $1",
-      [ticketId]
-    );
-
-    if (ticketResult.rows.length === 0) {
-      return res.status(404).json({
-        message: "No matching ticket found"
-      })
-    }
-
-    const activityResult = await pool.query(
-      `
-        SELECT *
-        FROM ticket_activity
-        WHERE ticket_id = $1
-        ORDER BY created_at ASC, id ASC
-      `,
-      [ticketId]
-    );
-
-    res.json({
-      activity: activityResult.rows
-    })
-  } catch (error) {
-    console.error(
-      "Error retrieving ticket activity:", error
-    );
-
-    res.status(500).json({
-      error: "Error retrieving ticket activity"
-    })
-  }
-});
-
-// POST a new comment for one ticket.
-app.post("/api/tickets/:id/comments", authenticateToken, requireTechnician, async (req, res) => {
-  const ticketId = Number(req.params.id);
-  const {comment} = req.body;
-  const author = req.user.name
-
-  if (!Number.isInteger(ticketId) || ticketId < 1) {
-    return res.status(400).json({
-      message: "Ticket ID must be a positive whole number",
-    });
-  }
-
-  if (!comment?.trim()) {
-    return res.status(400).json({
-      message: "Comment is required",
-    });
-  }
-
-
-  try {
-    const ticketResult = await pool.query(
-      "SELECT id FROM tickets WHERE id = $1",
-      [ticketId]
-    );
-
-    if (ticketResult.rows.length === 0) {
-      return res.status(404).json({
-        message: "No matching ticket found",
+    if (!Number.isInteger(ticketId) || ticketId < 1) {
+      return res.status(400).json({
+        message: "Ticket ID must be a positive whole number",
       });
     }
 
-    const result = await pool.query(
-      `
-        INSERT INTO ticket_comments (
-          ticket_id,
-          author,
-          comment
-        )
-        VALUES ($1, $2, $3)
-        RETURNING *
-      `,
-      [
-        ticketId,
-        author.trim(),
-        comment.trim(),
-      ]
-    );
+    try {
+      const ticketResult = await pool.query(
+        `
+          SELECT
+            id,
+            user_id
+          FROM tickets
+          WHERE id = $1
+        `,
+        [ticketId]
+      );
 
-    res.status(201).json({
-      message: "Comment added successfully",
-      comment: result.rows[0],
-    });
-  } catch (error) {
-    console.error("Error creating comment:", error);
+      if (ticketResult.rows.length === 0) {
+        return res.status(404).json({
+          message: "No matching ticket found",
+        });
+      }
 
-    res.status(500).json({
-      error: "Error creating ticket comment",
-    });
+      const ticket = ticketResult.rows[0];
+
+      const isTechnician =
+        req.user.role === "technician" ||
+        req.user.role === "admin";
+
+      const ownsTicket =
+        ticket.user_id === req.user.id;
+
+      if (!isTechnician && !ownsTicket) {
+        return res.status(403).json({
+          message:
+            "You do not have permission to view activity for this ticket",
+        });
+      }
+
+      const activityResult = await pool.query(
+        `
+          SELECT *
+          FROM ticket_activity
+          WHERE ticket_id = $1
+          ORDER BY created_at ASC, id ASC
+        `,
+        [ticketId]
+      );
+
+      res.json({
+        activity: activityResult.rows,
+      });
+    } catch (error) {
+      console.error(
+        "Error retrieving ticket activity:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error retrieving ticket activity",
+      });
+    }
   }
-});
+);
+
+// POST a new comment for one ticket.
+// POST a new comment for one ticket.
+// Regular users can comment on their own tickets.
+// Technicians/admins can comment on any ticket.
+app.post(
+  "/api/tickets/:id/comments",
+  authenticateToken,
+  async (req, res) => {
+    const ticketId = Number(req.params.id);
+    const { comment } = req.body;
+
+    if (!Number.isInteger(ticketId) || ticketId < 1) {
+      return res.status(400).json({
+        message: "Ticket ID must be a positive whole number",
+      });
+    }
+
+    if (!comment?.trim()) {
+      return res.status(400).json({
+        message: "Comment is required",
+      });
+    }
+
+    try {
+      const ticketResult = await pool.query(
+        `
+          SELECT
+            id,
+            user_id
+          FROM tickets
+          WHERE id = $1
+        `,
+        [ticketId]
+      );
+
+      if (ticketResult.rows.length === 0) {
+        return res.status(404).json({
+          message: "No matching ticket found",
+        });
+      }
+
+      const ticket = ticketResult.rows[0];
+
+      const isTechnician =
+        req.user.role === "technician" ||
+        req.user.role === "admin";
+
+      const ownsTicket =
+        ticket.user_id === req.user.id;
+
+      if (!isTechnician && !ownsTicket) {
+        return res.status(403).json({
+          message:
+            "You do not have permission to comment on this ticket",
+        });
+      }
+
+      const result = await pool.query(
+        `
+          INSERT INTO ticket_comments (
+            ticket_id,
+            author,
+            comment
+          )
+          VALUES ($1, $2, $3)
+          RETURNING *
+        `,
+        [
+          ticketId,
+          req.user.name,
+          comment.trim(),
+        ]
+      );
+
+      res.status(201).json({
+        message: "Comment added successfully",
+        comment: result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Error creating comment:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error creating ticket comment",
+      });
+    }
+  }
+);
 
 // POST a new ticket.
 app.post(

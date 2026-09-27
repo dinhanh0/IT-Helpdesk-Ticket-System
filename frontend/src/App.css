@@ -442,3 +442,52 @@ button:disabled{
 .user-ticket-card p {
   margin: 7px 0;
 }
+
+.user-ticket-details {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #d9dce3;
+}
+
+.user-ticket-details h4 {
+  margin-bottom: 12px;
+}
+
+.user-ticket-notes,
+.user-ticket-activity {
+  margin-top: 18px;
+}
+
+.user-ticket-note,
+.user-activity-entry {
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #d9dce3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.user-ticket-note p,
+.user-activity-entry p {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.user-ticket-note small,
+.user-activity-entry small {
+  opacity: 0.75;
+}
+
+.ticket-reply-form {
+  margin-top: 16px;
+}
+
+.ticket-reply-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
+
+.ticket-reply-form button {
+  margin-top: 4px;
+}
