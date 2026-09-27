@@ -45,6 +45,24 @@ The two user accounts can be used to verify ticket ownership and access control.
 
 ---
 
+## Screenshots
+
+### Login
+![alt text](image.png)
+
+### User Portal
+![alt text](image-1.png)
+
+![alt text](image-3.png)
+
+### Technician Dashboard
+![alt text](image-2.png)
+
+![alt text](image-4.png)
+
+### Ticket Management
+![alt text](image-5.png)
+
 ## Features
 
 ### Authentication and Authorization
