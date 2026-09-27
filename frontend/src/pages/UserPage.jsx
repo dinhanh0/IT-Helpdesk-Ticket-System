@@ -364,9 +364,9 @@ function UserPage({
 
   if (!currentUser) {
     return (
-      <div className="user-page">
+      <div className="empty-state-card">
+        <div className="empty-state-icon">?</div>
         <h1>User Portal</h1>
-
         <p>
           Please log in to submit and view your
           support tickets.
@@ -374,6 +374,7 @@ function UserPage({
 
         <button
           type="button"
+          className="submit-button"
           onClick={onRequireLogin}
         >
           Log In
@@ -384,307 +385,379 @@ function UserPage({
 
   return (
     <div className="user-page">
-      <h1>User Portal</h1>
-
-      <p>
-        Logged in as{" "}
-        <strong>{currentUser.name}</strong>
-      </p>
-
-      <p>{currentUser.email}</p>
-
-      <h2>Submit a Support Ticket</h2>
-
-      <form
-        className="create-ticket-form"
-        onSubmit={handleCreateTicket}
-      >
-        {errorMessage && (
-          <p className="error-message">
-            {errorMessage}
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">Support Center</span>
+          <h1>User Portal</h1>
+          <p>
+            Create a request, track its progress, and
+            keep the conversation in one place.
           </p>
-        )}
+        </div>
 
-        {successMessage && (
-          <p className="success-message">
-            {successMessage}
-          </p>
-        )}
+        <div className="account-summary">
+          <span className="account-summary-label">
+            Signed in as
+          </span>
+          <strong>{currentUser.name}</strong>
+          <small>{currentUser.email}</small>
+        </div>
+      </div>
 
-        <input
-          type="text"
-          placeholder="Ticket title"
-          value={newTitle}
-          onChange={(event) =>
-            setNewTitle(event.target.value)
-          }
-          required
-        />
+      {errorMessage && (
+        <p className="error-message">
+          {errorMessage}
+        </p>
+      )}
 
-        <select
-          value={newCategory}
-          onChange={(event) =>
-            setNewCategory(event.target.value)
-          }
-          required
-        >
-          <option value="">
-            Select a category
-          </option>
+      {successMessage && (
+        <p className="success-message">
+          {successMessage}
+        </p>
+      )}
 
-          <option value="Hardware">
-            Hardware
-          </option>
+      <div className="user-portal-grid">
+        <section className="portal-panel create-ticket-panel">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">New request</span>
+              <h2>Submit a Support Ticket</h2>
+            </div>
+          </div>
 
-          <option value="Software">
-            Software
-          </option>
+          <form
+            className="create-ticket-form"
+            onSubmit={handleCreateTicket}
+          >
+            <label className="field-group">
+              <span>Title</span>
+              <input
+                type="text"
+                placeholder="Brief summary of the issue"
+                value={newTitle}
+                onChange={(event) =>
+                  setNewTitle(event.target.value)
+                }
+                required
+              />
+            </label>
 
-          <option value="Network">
-            Network
-          </option>
-
-          <option value="Account">
-            Account
-          </option>
-
-          <option value="Other">
-            Other
-          </option>
-        </select>
-
-        <select
-          value={newPriority}
-          onChange={(event) =>
-            setNewPriority(event.target.value)
-          }
-        >
-          <option value="">
-            Default priority: Low
-          </option>
-
-          <option value="low">
-            Low
-          </option>
-
-          <option value="medium">
-            Medium
-          </option>
-
-          <option value="high">
-            High
-          </option>
-
-          <option value="urgent">
-            Urgent
-          </option>
-        </select>
-
-        <textarea
-          placeholder="Describe the problem"
-          value={newDescription}
-          onChange={(event) =>
-            setNewDescription(event.target.value)
-          }
-          rows={4}
-          required
-        />
-
-        <button
-          type="submit"
-          className="submit-button"
-          disabled={isCreating}
-        >
-          {isCreating
-            ? "Creating..."
-            : "Submit Ticket"}
-        </button>
-      </form>
-
-      <section className="my-tickets">
-        <h2>My Tickets</h2>
-
-        {isLoadingTickets && (
-          <p>Loading tickets...</p>
-        )}
-
-        {!isLoadingTickets &&
-          tickets.length === 0 && (
-            <p>
-              You haven't submitted any tickets yet.
-            </p>
-          )}
-
-        {!isLoadingTickets &&
-          tickets.map((ticket) => {
-            const isExpanded =
-              expandedTicketId === ticket.id;
-
-            const comments =
-              ticketComments[ticket.id] || [];
-
-            const activity =
-              ticketActivity[ticket.id] || [];
-
-            return (
-              <div
-                className="user-ticket-card"
-                key={ticket.id}
-              >
-                <h3>{ticket.title}</h3>
-
-                <p>
-                  <strong>Ticket ID:</strong>{" "}
-                  {ticket.id}
-                </p>
-
-                <p>
-                  <strong>Category:</strong>{" "}
-                  {ticket.category}
-                </p>
-
-                <p>
-                  <strong>Priority:</strong>{" "}
-                  {ticket.priority}
-                </p>
-
-                <p>
-                  <strong>Status:</strong>{" "}
-                  {ticket.status}
-                </p>
-
-                <p>
-                  <strong>Assigned to:</strong>{" "}
-                  {ticket.assigned_to_name ||
-                    "Unassigned"}
-                </p>
-
-                <p>
-                  <strong>Description:</strong>{" "}
-                  {ticket.description}
-                </p>
-
-                <p>
-                  <strong>Created:</strong>{" "}
-                  {new Date(
-                    ticket.created_at
-                  ).toLocaleString()}
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleToggleDetails(ticket.id)
+            <div className="form-row">
+              <label className="field-group">
+                <span>Category</span>
+                <select
+                  value={newCategory}
+                  onChange={(event) =>
+                    setNewCategory(event.target.value)
                   }
-                  disabled={
-                    loadingDetailsId === ticket.id
+                  required
+                >
+                  <option value="">
+                    Select a category
+                  </option>
+                  <option value="Hardware">
+                    Hardware
+                  </option>
+                  <option value="Software">
+                    Software
+                  </option>
+                  <option value="Network">
+                    Network
+                  </option>
+                  <option value="Account">
+                    Account
+                  </option>
+                  <option value="Other">
+                    Other
+                  </option>
+                </select>
+              </label>
+
+              <label className="field-group">
+                <span>Priority</span>
+                <select
+                  value={newPriority}
+                  onChange={(event) =>
+                    setNewPriority(event.target.value)
                   }
                 >
-                  {loadingDetailsId === ticket.id
-                    ? "Loading..."
-                    : isExpanded
-                      ? "Hide Details"
-                      : "View Details"}
-                </button>
+                  <option value="">
+                    Low (default)
+                  </option>
+                  <option value="low">Low</option>
+                  <option value="medium">
+                    Medium
+                  </option>
+                  <option value="high">High</option>
+                  <option value="urgent">
+                    Urgent
+                  </option>
+                </select>
+              </label>
+            </div>
 
-                {isExpanded && (
-                  <div className="user-ticket-details">
-                    <div className="user-ticket-notes">
-                      <h4>Conversation</h4>
+            <label className="field-group">
+              <span>Description</span>
+              <textarea
+                placeholder="Describe what happened, what you expected, and anything you already tried."
+                value={newDescription}
+                onChange={(event) =>
+                  setNewDescription(event.target.value)
+                }
+                rows={6}
+                required
+              />
+            </label>
 
-                      {comments.length === 0 ? (
-                        <p>
-                          No messages yet.
-                        </p>
-                      ) : (
-                        comments.map((comment) => (
-                          <div
-                            className="user-ticket-note"
-                            key={comment.id}
-                          >
-                            <p>{comment.comment}</p>
+            <button
+              type="submit"
+              className="submit-button"
+              disabled={isCreating}
+            >
+              {isCreating
+                ? "Creating ticket..."
+                : "Submit Ticket"}
+            </button>
+          </form>
+        </section>
 
-                            <small>
-                              {comment.author}
-                              {" — "}
-                              {new Date(
-                                comment.created_at
-                              ).toLocaleString()}
-                            </small>
-                          </div>
-                        ))
-                      )}
+        <section className="portal-panel tickets-panel">
+          <div className="section-heading section-heading-row">
+            <div>
+              <span className="eyebrow">Your requests</span>
+              <h2>My Tickets</h2>
+            </div>
 
-                      <div className="ticket-reply-form">
-                        <textarea
-                          rows={3}
-                          placeholder="Write a reply..."
-                          value={
-                            replyText[ticket.id] || ""
-                          }
-                          onChange={(event) =>
-                            setReplyText(
-                              (previous) => ({
-                                ...previous,
-                                [ticket.id]:
-                                  event.target.value,
-                              })
-                            )
-                          }
-                        />
+            {!isLoadingTickets && (
+              <span className="count-pill">
+                {tickets.length}
+              </span>
+            )}
+          </div>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSendReply(ticket.id)
-                          }
-                          disabled={
-                            sendingReplyId ===
-                            ticket.id
-                          }
-                        >
-                          {sendingReplyId ===
-                          ticket.id
-                            ? "Sending..."
-                            : "Send Reply"}
-                        </button>
-                      </div>
+          {isLoadingTickets && (
+            <div className="inline-empty-state">
+              Loading tickets...
+            </div>
+          )}
+
+          {!isLoadingTickets &&
+            tickets.length === 0 && (
+              <div className="inline-empty-state">
+                <strong>No tickets yet</strong>
+                <span>
+                  Your submitted support requests will
+                  appear here.
+                </span>
+              </div>
+            )}
+
+          {!isLoadingTickets &&
+            tickets.map((ticket) => {
+              const isExpanded =
+                expandedTicketId === ticket.id;
+
+              const comments =
+                ticketComments[ticket.id] || [];
+
+              const activity =
+                ticketActivity[ticket.id] || [];
+
+              const statusClass = String(
+                ticket.status || "open"
+              ).replace(/\s+/g, "-");
+
+              const priorityClass = String(
+                ticket.priority || "low"
+              ).replace(/\s+/g, "-");
+
+              return (
+                <article
+                  className="user-ticket-card"
+                  key={ticket.id}
+                >
+                  <div className="ticket-card-header">
+                    <div>
+                      <span className="ticket-number">
+                        Ticket #{ticket.id}
+                      </span>
+                      <h3>{ticket.title}</h3>
                     </div>
 
-                    <div className="user-ticket-activity">
-                      <h4>Activity History</h4>
+                    <span
+                      className={`ticket-badge status-${statusClass}`}
+                    >
+                      {ticket.status}
+                    </span>
+                  </div>
 
-                      {activity.length === 0 ? (
-                        <p>
-                          No activity recorded yet.
-                        </p>
-                      ) : (
-                        activity.map((entry) => (
-                          <div
-                            className="user-activity-entry"
-                            key={entry.id}
-                          >
-                            <p>
-                              {entry.description}
-                            </p>
+                  <div className="ticket-badges">
+                    <span className="ticket-badge neutral-badge">
+                      {ticket.category}
+                    </span>
 
-                            <small>
-                              {entry.performed_by}
-                              {" — "}
-                              {new Date(
-                                entry.created_at
-                              ).toLocaleString()}
-                            </small>
-                          </div>
-                        ))
-                      )}
+                    <span
+                      className={`ticket-badge priority-${priorityClass}`}
+                    >
+                      {ticket.priority} priority
+                    </span>
+                  </div>
+
+                  <p className="ticket-description">
+                    {ticket.description}
+                  </p>
+
+                  <div className="ticket-info-grid">
+                    <div>
+                      <span>Assigned to</span>
+                      <strong>
+                        {ticket.assigned_to_name ||
+                          "Unassigned"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      <span>Created</span>
+                      <strong>
+                        {new Date(
+                          ticket.created_at
+                        ).toLocaleString()}
+                      </strong>
                     </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
-      </section>
+
+                  <div className="ticket-card-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleToggleDetails(ticket.id)
+                      }
+                      disabled={
+                        loadingDetailsId === ticket.id
+                      }
+                    >
+                      {loadingDetailsId === ticket.id
+                        ? "Loading..."
+                        : isExpanded
+                          ? "Hide Details"
+                          : "View Details"}
+                    </button>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="user-ticket-details">
+                      <div className="details-grid">
+                        <div className="user-ticket-notes">
+                          <div className="details-heading">
+                            <h4>Conversation</h4>
+                            <span>
+                              {comments.length} message
+                              {comments.length === 1 ? "" : "s"}
+                            </span>
+                          </div>
+
+                          {comments.length === 0 ? (
+                            <div className="inline-empty-state compact">
+                              No messages yet.
+                            </div>
+                          ) : (
+                            comments.map((comment) => (
+                              <div
+                                className="user-ticket-note"
+                                key={comment.id}
+                              >
+                                <p>{comment.comment}</p>
+                                <small>
+                                  {comment.author}
+                                  {" · "}
+                                  {new Date(
+                                    comment.created_at
+                                  ).toLocaleString()}
+                                </small>
+                              </div>
+                            ))
+                          )}
+
+                          <div className="ticket-reply-form">
+                            <textarea
+                              rows={3}
+                              placeholder="Write a reply..."
+                              value={
+                                replyText[ticket.id] || ""
+                              }
+                              onChange={(event) =>
+                                setReplyText(
+                                  (previous) => ({
+                                    ...previous,
+                                    [ticket.id]:
+                                      event.target.value,
+                                  })
+                                )
+                              }
+                            />
+
+                            <button
+                              type="button"
+                              className="submit-button"
+                              onClick={() =>
+                                handleSendReply(ticket.id)
+                              }
+                              disabled={
+                                sendingReplyId ===
+                                ticket.id
+                              }
+                            >
+                              {sendingReplyId ===
+                              ticket.id
+                                ? "Sending..."
+                                : "Send Reply"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="user-ticket-activity">
+                          <div className="details-heading">
+                            <h4>Activity</h4>
+                            <span>
+                              {activity.length} event
+                              {activity.length === 1 ? "" : "s"}
+                            </span>
+                          </div>
+
+                          {activity.length === 0 ? (
+                            <div className="inline-empty-state compact">
+                              No activity recorded yet.
+                            </div>
+                          ) : (
+                            activity.map((entry) => (
+                              <div
+                                className="user-activity-entry"
+                                key={entry.id}
+                              >
+                                <p>
+                                  {entry.description}
+                                </p>
+
+                                <small>
+                                  {entry.performed_by ||
+                                    "System"}
+                                  {" · "}
+                                  {new Date(
+                                    entry.created_at
+                                  ).toLocaleString()}
+                                </small>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+        </section>
+      </div>
     </div>
   );
 }

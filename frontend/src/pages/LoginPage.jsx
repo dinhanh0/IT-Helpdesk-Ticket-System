@@ -1,12 +1,33 @@
 import { useState } from "react";
 import { API_URL } from "../config";
 
-function LoginPage({ onLogin }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+function LoginPage({
+  onLogin,
+  loginDraft,
+  setLoginDraft,
+}) {
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] =
+    useState(false);
+
+  const email = loginDraft.email;
+  const password = loginDraft.password;
+
+  function handleEmailChange(event) {
+    setLoginDraft((previous) => ({
+      ...previous,
+      email: event.target.value,
+    }));
+  }
+
+  function handlePasswordChange(event) {
+    setLoginDraft((previous) => ({
+      ...previous,
+      password: event.target.value,
+    }));
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -14,7 +35,9 @@ function LoginPage({ onLogin }) {
     setErrorMessage("");
 
     if (!email.trim() || !password) {
-      setErrorMessage("Email and password are required.");
+      setErrorMessage(
+        "Email and password are required."
+      );
       return;
     }
 
@@ -45,16 +68,23 @@ function LoginPage({ onLogin }) {
         );
       }
 
-      localStorage.setItem("token", data.token);
+      localStorage.setItem(
+        "token",
+        data.token
+      );
 
       if (typeof onLogin === "function") {
         onLogin(data.user);
       }
     } catch (error) {
-      console.error("Error logging in:", error);
+      console.error(
+        "Error logging in:",
+        error
+      );
 
       setErrorMessage(
-        error.message || "Unable to log in."
+        error.message ||
+          "Unable to log in."
       );
     } finally {
       setIsLoggingIn(false);
@@ -83,9 +113,7 @@ function LoginPage({ onLogin }) {
           type="email"
           placeholder="Email"
           value={email}
-          onChange={(event) =>
-            setEmail(event.target.value)
-          }
+          onChange={handleEmailChange}
           required
         />
 
@@ -93,9 +121,7 @@ function LoginPage({ onLogin }) {
           type="password"
           placeholder="Password"
           value={password}
-          onChange={(event) =>
-            setPassword(event.target.value)
-          }
+          onChange={handlePasswordChange}
           required
         />
 
