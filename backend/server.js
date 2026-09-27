@@ -691,6 +691,46 @@ app.get("/api/tickets/analytics", authenticateToken, requireTechnician, async (r
 });
 
 
+// GET tickets belonging to the currently logged-in user.
+app.get(
+  "/api/my-tickets",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const result = await pool.query(
+        `
+          SELECT
+            tickets.*,
+            users.name AS assigned_to_name
+          FROM tickets
+
+          LEFT JOIN users
+            ON tickets.assigned_to_user_id = users.id
+
+          WHERE tickets.user_id = $1
+
+          ORDER BY tickets.created_at DESC
+        `,
+        [req.user.id]
+      );
+
+      res.json({
+        count: result.rows.length,
+        tickets: result.rows,
+      });
+    } catch (error) {
+      console.error(
+        "Error retrieving user tickets:",
+        error
+      );
+
+      res.status(500).json({
+        error: "Error retrieving your tickets",
+      });
+    }
+  }
+);
+
 // GET one ticket.
 app.get("/api/tickets/:id", async (req, res) => {
   const ticketId = Number(req.params.id);
@@ -831,129 +871,135 @@ app.post("/api/tickets/:id/comments", authenticateToken, requireTechnician, asyn
 });
 
 // POST a new ticket.
-app.post("/api/tickets", async (req, res) => {
-  const {
-    name,
-    email,
-    title,
-    category,
-    description,
-    priority = "low",
-  } = req.body;
-
-  if (
-    !name?.trim() ||
-    !email?.trim() ||
-    !title?.trim() ||
-    !category ||
-    !description?.trim()
-  ) {
-    return res.status(400).json({
-      message:
-        "Missing name, email, title, category, or description",
-    });
-  }
-
-  if (!allowedCategories.includes(category)) {
-    return res.status(400).json({
-      message:
-        "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'",
-    });
-  }
-
-  if (!allowedPriorities.includes(priority)) {
-    return res.status(400).json({
-      message:
-        "priority should be 'low', 'medium', 'high', or 'urgent'",
-    });
-  }
-
-  const sqlQuery = `
-    INSERT INTO tickets (
-      name,
-      email,
+app.post(
+  "/api/tickets",
+  authenticateToken,
+  async (req, res) => {
+    const {
       title,
       category,
       description,
+      priority = "low",
+    } = req.body;
+
+    if (
+      !title?.trim() ||
+      !category ||
+      !description?.trim()
+    ) {
+      return res.status(400).json({
+        message:
+          "Title, category, and description are required",
+      });
+    }
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({
+        message:
+          "category should be 'Hardware', 'Software', 'Network', 'Account', or 'Other'",
+      });
+    }
+
+    if (!allowedPriorities.includes(priority)) {
+      return res.status(400).json({
+        message:
+          "priority should be 'low', 'medium', 'high', or 'urgent'",
+      });
+    }
+
+    const sqlQuery = `
+      INSERT INTO tickets (
+        user_id,
+        name,
+        email,
+        title,
+        category,
+        description,
+        priority,
+        status,
+        sla_due_at
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        CURRENT_TIMESTAMP +
+          CASE $7::VARCHAR
+            WHEN 'urgent' THEN INTERVAL '4 hours'
+            WHEN 'high' THEN INTERVAL '8 hours'
+            WHEN 'medium' THEN INTERVAL '24 hours'
+            WHEN 'low' THEN INTERVAL '72 hours'
+            ELSE INTERVAL '72 hours'
+          END
+      )
+      RETURNING *
+    `;
+
+    const values = [
+      req.user.id,
+      req.user.name,
+      req.user.email,
+      title.trim(),
+      category,
+      description.trim(),
       priority,
-      status,
-      sla_due_at
-    )
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      $6,
-      $7,
-      CURRENT_TIMESTAMP +
-        CASE $6::VARCHAR
-          WHEN 'urgent' THEN INTERVAL '4 hours'
-          WHEN 'high' THEN INTERVAL '8 hours'
-          WHEN 'medium' THEN INTERVAL '24 hours'
-          WHEN 'low' THEN INTERVAL '72 hours'
-          ELSE INTERVAL '72 hours'
-        END
-    )
-    RETURNING *
-  `;
+      "open",
+    ];
 
-  const values = [
-    name.trim(),
-    email.trim(),
-    title.trim(),
-    category,
-    description.trim(),
-    priority,
-    "open",
-  ];
+    const client = await pool.connect();
 
-  const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-  try {
-    await client.query("BEGIN")
+      const result = await client.query(
+        sqlQuery,
+        values
+      );
 
-    const result = await client.query(sqlQuery, values);
-    const newTicket = result.rows[0];
+      const newTicket = result.rows[0];
 
-    await client.query(
-      `
-        INSERT INTO ticket_activity(
-          ticket_id,
-          activity_type,
-          description,
-          performed_by
-        )
-        VALUES($1,$2,$3,$4)
-      
-      `,
+      await client.query(
+        `
+          INSERT INTO ticket_activity (
+            ticket_id,
+            activity_type,
+            description,
+            performed_by
+          )
+          VALUES ($1, $2, $3, $4)
+        `,
+        [
+          newTicket.id,
+          "ticket_created",
+          "Ticket was created",
+          req.user.name,
+        ]
+      );
 
-      [
-        newTicket.id,
-        "ticket_created",
-        "Ticket was created",
-        newTicket.name
-      ]
+      await client.query("COMMIT");
 
-    );
+      res.status(201).json(newTicket);
+    } catch (error) {
+      await client.query("ROLLBACK");
 
-    await client.query("COMMIT");
+      console.error(
+        "Error creating ticket:",
+        error
+      );
 
-    res.status(201).json(newTicket);
-  } catch (error) {
-    await client.query("ROLLBACK");
-
-    console.error("Error creating ticket:", error);
-
-    res.status(500).json({
-      error: "Error creating a ticket",
-    });
-  }finally {
-    client.release();
+      res.status(500).json({
+        error: "Error creating a ticket",
+      });
+    } finally {
+      client.release();
+    }
   }
-
-});
+);
 
 // PUT supports partial updates.
 // This allows the technician page to send only { status: "resolved" }.

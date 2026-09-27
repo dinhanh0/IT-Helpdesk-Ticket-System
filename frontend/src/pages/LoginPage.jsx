@@ -1,98 +1,115 @@
-import {useState} from "react"
-import {API_URL} from "../config"
+import { useState } from "react";
+import { API_URL } from "../config";
 
 function LoginPage({ onLogin }) {
-    const [email, setEmail] = useState("")
-    const [password, setPassword] = useState("");
-    const [errorMessage, setErrorMessage] = useState("")
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-    async function handleSubmit(event) {
-        event.preventDefault();
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-        setErrorMessage("")
+  async function handleSubmit(event) {
+    event.preventDefault();
 
-        try{
-            const response = await fetch(
-                `${API_URL}/api/auth/login`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        email,
-                        password
-                    })
-                }
-            )
+    setErrorMessage("");
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    data.message ||
-                        data.error ||
-                        "Unable to log in."
-                )
-            }
-
-            localStorage.setItem("token", data.token);
-
-            onLogin(data.user);
-        } catch (error) {
-            setErrorMessage(
-                error.message || "Unable to log in."
-            )
-        }
+    if (!email.trim() || !password) {
+      setErrorMessage("Email and password are required.");
+      return;
     }
 
-    return (
-        <div className = "login-page">
-            <h1>Technician Login</h1>
+    setIsLoggingIn(true);
 
-            {errorMessage && (
-                <p className = "error-message">
-                    {errorMessage}
-                </p>
-            )}
+    try {
+      const response = await fetch(
+        `${API_URL}/api/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+          }),
+        }
+      );
 
-            <form onSubmit = {handleSubmit}>
-                <input
-                    type = "email"
-                    placeholder = "Email"
-                    value = {email}
-                    onChange={(event) => 
-                        setEmail(event.target.value)
-                    }
-                />
+      const data = await response.json();
 
-                <input
-                    type = "password"
-                    placeholder="Password"
-                    value = {password}
-                    onChange={(event) => 
-                        setPassword(event.target.value)
-                    }
-                    />
-                
-                <button type = "submit">
-                    Log in
-                </button>
-            </form>
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            data.error ||
+            "Unable to log in."
+        );
+      }
 
-            <div className="demo-account">
-            <h3>Demo Technician Account</h3>
+      localStorage.setItem("token", data.token);
 
-            <p>
-                <strong>Email:</strong> anh@example.com
-            </p>
+      if (typeof onLogin === "function") {
+        onLogin(data.user);
+      }
+    } catch (error) {
+      console.error("Error logging in:", error);
 
-            <p>
-                <strong>Password:</strong> Helpdesk123!
-            </p>
-            </div>
-        </div>
-    );
+      setErrorMessage(
+        error.message || "Unable to log in."
+      );
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <h1>Account Login</h1>
+
+      <p>
+        Log in to access your support account.
+      </p>
+
+      <form
+        className="login-form"
+        onSubmit={handleSubmit}
+      >
+        {errorMessage && (
+          <p className="error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(event) =>
+            setEmail(event.target.value)
+          }
+          required
+        />
+
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(event) =>
+            setPassword(event.target.value)
+          }
+          required
+        />
+
+        <button
+          type="submit"
+          disabled={isLoggingIn}
+        >
+          {isLoggingIn
+            ? "Logging in..."
+            : "Log In"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 export default LoginPage;

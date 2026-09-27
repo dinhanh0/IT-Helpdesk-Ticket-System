@@ -378,21 +378,67 @@ button:disabled{
   color: #374151;
 }
 
-.demo-account {
-  margin: 24px auto 0;
-  padding: 16px 20px;
-  max-width: 420px;
-  background: #f8f9fb;
+
+.demo-accounts-page {
+  max-width: 700px;
+  margin: 30px auto;
+  padding: 0 20px;
+}
+
+.demo-accounts-page h2 {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.demo-accounts-description {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.demo-account-card {
+  padding: 18px 22px;
+  margin-bottom: 18px;
   border: 1px solid #d9dce3;
   border-radius: 10px;
+  background: #f8f9fb;
   text-align: left;
 }
 
-.demo-account h3 {
+.demo-account-card h3 {
   margin-top: 0;
+  margin-bottom: 14px;
+}
+
+.demo-account-card p {
+  margin: 8px 0;
+}
+
+.logged-in-user {
+  margin-top: 12px;
   text-align: center;
 }
 
-.demo-account p {
-  margin: 6px 0;
+.my-tickets {
+  margin-top: 40px;
+}
+
+.my-tickets h2 {
+  margin-bottom: 20px;
+}
+
+.user-ticket-card {
+  margin-bottom: 18px;
+  padding: 18px 22px;
+  border: 1px solid #d9dce3;
+  border-radius: 10px;
+  background: #f8f9fb;
+  text-align: left;
+}
+
+.user-ticket-card h3 {
+  margin-top: 0;
+}
+
+.user-ticket-card p {
+  margin: 7px 0;
 }
