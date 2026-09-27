@@ -60,6 +60,9 @@ The two user accounts can be used to verify ticket ownership and access control.
 
 ![alt text](image-4.png)
 
+<img width="1147" height="567" alt="image" src="https://github.com/user-attachments/assets/5a78d635-857f-4971-9b6e-14e5b0116d98" />
+
+
 ### Ticket Management
 ![alt text](image-5.png)
 
