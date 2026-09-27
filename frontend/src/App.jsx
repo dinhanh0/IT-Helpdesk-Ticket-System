@@ -204,26 +204,6 @@ function App() {
               Ticket System.
             </p>
 
-            <div className="demo-account-card">
-              <h3>Technician Account</h3>
-
-              <p>
-                <strong>Email:</strong>{" "}
-                anh@example.com
-              </p>
-
-              <p>
-                <strong>Password:</strong>{" "}
-                Helpdesk123!
-              </p>
-
-              <p>
-                <strong>Access:</strong>{" "}
-                View and manage all tickets,
-                assignments, comments, activity,
-                and analytics.
-              </p>
-            </div>
 
             <div className="demo-account-card">
               <h3>Technician Account</h3>
